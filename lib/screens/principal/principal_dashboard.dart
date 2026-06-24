@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:attendance_system/services/mongodb_service.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'approve_leave_page.dart';
+import 'assign_standing_principal_page.dart';
 import '/services/auth_service.dart';
 import '/login_page.dart';
 import 'view_attendance_page.dart';
@@ -14,7 +15,8 @@ const _kGirlsColor = Color(0xFFD67845); // terra
 const _kTotalColor = Color(0xFF528751); // green
 
 class PrincipalDashboard extends StatefulWidget {
-  const PrincipalDashboard({super.key});
+  final bool isCrc;
+  const PrincipalDashboard({super.key, this.isCrc = false});
   @override
   State<PrincipalDashboard> createState() => _PrincipalDashboardState();
 }
@@ -219,7 +221,7 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
           child: Column(children: [
 
             WarliAppBar(
-              title: "Principal Dashboard",
+              title: widget.isCrc ? "CRC Dashboard" : "Principal Dashboard",
               trailing: IconButton(
                 icon: const Icon(Icons.logout_rounded, color: AppTheme.textDark, size: 22),
                 onPressed: () async {
@@ -260,8 +262,8 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
                               Text("Welcome Back 👋",
                                   style: TextStyle(color: AppTheme.textDark.withOpacity(0.7), fontSize: 13)),
                               const SizedBox(height: 4),
-                              const Text("Principal",
-                                  style: TextStyle(color: AppTheme.textDark,
+                              Text(widget.isCrc ? "CRC" : "Principal",
+                                  style: const TextStyle(color: AppTheme.textDark,
                                       fontWeight: FontWeight.bold, fontSize: 20)),
                               const SizedBox(height: 8),
                               Text(_todayDisplayDate,
@@ -291,15 +293,27 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
                           onTap: () => Navigator.push(context,
                               MaterialPageRoute(builder: (_) => const ViewAttendancePage())),
                         )),
-                        const SizedBox(width: 12),
-                        Expanded(child: _PrincipalCard(
-                          icon: Icons.event_note_rounded,
-                          title: "Leave\nApplications",
-                          subtitle: "Approve or reject\nstudent leave requests",
-                          onTap: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => const ApproveLeavePage())),
-                        )),
+                        if (!widget.isCrc) ...[
+                          const SizedBox(width: 12),
+                          Expanded(child: _PrincipalCard(
+                            icon: Icons.event_note_rounded,
+                            title: "Leave\nApplications",
+                            subtitle: "Approve or reject\nstudent leave requests",
+                            onTap: () => Navigator.push(context,
+                                MaterialPageRoute(builder: (_) => const ApproveLeavePage())),
+                          )),
+                        ],
                       ]),
+                      if (!widget.isCrc) ...[
+                        const SizedBox(height: 12),
+                        _PrincipalTile(
+                          icon: Icons.assignment_ind_rounded,
+                          title: "Assign Standing Principal",
+                          subtitle: "Delegate leave approval authority to a teacher",
+                          onTap: () => Navigator.push(context,
+                              MaterialPageRoute(builder: (_) => const AssignStandingPrincipalPage())),
+                        ),
+                      ],
 
                       const SizedBox(height: 26),
 
@@ -1141,4 +1155,45 @@ class _PrincipalCard extends StatelessWidget {
       ]),
     ),
   );
+}
+
+class _PrincipalTile extends StatelessWidget {
+  final IconData icon;
+  final String title, subtitle;
+  final VoidCallback onTap;
+  const _PrincipalTile({required this.icon, required this.title, required this.subtitle, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(13),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBg.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: AppTheme.primary.withOpacity(0.18)),
+        ),
+        child: Row(children: [
+          Container(
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: AppTheme.primary, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppTheme.textDark)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: TextStyle(color: AppTheme.textDark.withOpacity(0.5), fontSize: 12)),
+            ]),
+          ),
+          Icon(Icons.chevron_right_rounded, color: AppTheme.primary.withOpacity(0.4), size: 20),
+        ]),
+      ),
+    );
+  }
 }

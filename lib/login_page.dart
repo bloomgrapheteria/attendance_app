@@ -92,7 +92,7 @@ class _LoginPageState extends State<LoginPage>
     }
   }
 
-  /// Teacher login: look up email by phone number, then sign in normally.
+  /// Login with phone number: look up email by phone number, then sign in normally.
   Future<void> _loginWithPhone() async {
     final phone    = _loginPhoneCtrl.text.trim();
     final password = _loginPassCtrl.text.trim();
@@ -105,12 +105,11 @@ class _LoginPageState extends State<LoginPage>
       final query = await FirebaseFirestore.instance
           .collection('users')
           .where('phone', isEqualTo: phone)
-          .where('role',  isEqualTo: 'teacher')
           .limit(1)
           .get();
       if (query.docs.isEmpty) {
         setState(() =>
-        _error = 'No teacher account found for this mobile number.');
+        _error = 'No account found for this mobile number.');
         return;
       }
       final email = (query.docs.first.data()['email'] as String?) ?? '';
@@ -147,12 +146,14 @@ class _LoginPageState extends State<LoginPage>
       dest = const AdminDashboard();
     } else if (role == 'principal') {
       dest = const PrincipalDashboard();
+    } else if (role == 'crc') {
+      dest = const PrincipalDashboard(isCrc: true);
     } else if (role == 'teacher') {
       dest = const TeacherDashboard();
     } else if (role == 'watchman') {
       dest = const WatchmanDashboard();
     } else {
-      throw Exception('Invalid role: \$role');
+      throw Exception('Invalid role: $role');
     }
     Navigator.pushReplacement(
         context, MaterialPageRoute(builder: (_) => dest));
@@ -521,7 +522,7 @@ class _LoginForm extends StatelessWidget {
                             size: 15,
                             color: isPhone ? _parchmentLight : _textMuted),
                         const SizedBox(width: 6),
-                        Text('Mobile (Teacher)',
+                        Text('Mobile',
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,

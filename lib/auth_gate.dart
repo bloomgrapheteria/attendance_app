@@ -60,6 +60,7 @@ class AuthGate extends StatelessWidget {
             if (role == 'admin') return const AdminDashboard();
             if (role == 'teacher') return const TeacherDashboard();
             if (role == 'principal') return const PrincipalDashboard();
+            if (role == 'crc') return const PrincipalDashboard(isCrc: true);
             if (role == 'watchman') return const WatchmanDashboard();
 
             return const Scaffold(

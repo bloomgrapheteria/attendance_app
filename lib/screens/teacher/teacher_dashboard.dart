@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:attendance_system/services/mongodb_service.dart';
 import 'mark_attendance_page.dart';
 import 'create_leave_page.dart';
+import '../principal/approve_leave_page.dart';
 import '/login_page.dart';
 import '/services/auth_service.dart';
 import '../admin/admin_dashboard.dart'; // ← shared AppTheme + WarliAppBar + WarliButton + WarliField
@@ -14,6 +15,7 @@ class TeacherDashboard extends StatefulWidget {
 
 class _TeacherDashboardState extends State<TeacherDashboard> {
   String? _displayName;
+  String? _classId;
   bool _loadingName = true;
 
   @override
@@ -28,8 +30,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       final name = doc.data()?['name'] as String?;
+      final classId = doc.data()?['classId'] as String?;
       setState(() {
         _displayName = (name != null && name.isNotEmpty) ? name : (user.displayName ?? 'Teacher');
+        _classId = classId;
         _loadingName = false;
       });
     } catch (_) {
@@ -207,6 +211,51 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                         onTap: () => Navigator.push(
                             context, MaterialPageRoute(builder: (_) => const CreateLeavePage())),
                       ),
+                      const SizedBox(height: 12),
+
+                      // ── Standing Principal dynamic option ──
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('standing_principals')
+                            .where('teacherEmail', isEqualTo: FirebaseAuth.instance.currentUser?.email)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) return const SizedBox();
+                          
+                          final todayStr = DateTime.now().toString().split(' ')[0];
+                          bool isStanding = false;
+                          
+                          for (var doc in snapshot.data!.docs) {
+                            final data = doc.data() as Map<String, dynamic>;
+                            final start = data['startDate'] ?? '';
+                            final end = data['endDate'] ?? '';
+                            if (todayStr.compareTo(start) >= 0 && todayStr.compareTo(end) <= 0) {
+                              isStanding = true;
+                              break;
+                            }
+                          }
+                          
+                          if (!isStanding) return const SizedBox();
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _DashTile(
+                              icon: Icons.assignment_ind_rounded,
+                              title: "Manage Leaves (Standing Principal)",
+                              subtitle: "Approve or reject leave requests as delegated principal",
+                              onTap: () => Navigator.push(
+                                  context, MaterialPageRoute(builder: (_) => const ApproveLeavePage())),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ── Leave History ─────────────────────────
+                      WarliSectionTitle(title: "LEAVE HISTORY (LAST 30 DAYS)"),
+                      const SizedBox(height: 10),
+                      _buildLeaveHistory(),
 
                       const SizedBox(height: 28),
                     ],
@@ -217,6 +266,154 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildLeaveHistory() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return const SizedBox();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('leave_requests').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+        }
+
+        final email = user.email;
+        final oneMonthAgo = DateTime.now().subtract(const Duration(days: 30));
+
+        final leaves = snapshot.data!.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          
+          // Filter by time: last 30 days
+          final timestamp = data['timestamp'];
+          DateTime? dt;
+          if (timestamp is Timestamp) {
+            dt = timestamp.toDate();
+          } else if (timestamp is String) {
+            dt = DateTime.tryParse(timestamp);
+          }
+          if (dt == null) return false;
+          if (dt.isBefore(oneMonthAgo)) return false;
+
+          // Filter by relation: teacher email OR classId matches
+          final isMyTeacherLeave = data['type'] == 'teacher' && data['teacherEmail'] == email;
+          final isMyStudentLeave = data['type'] == 'student' && _classId != null && data['classId'] == _classId;
+
+          return isMyTeacherLeave || isMyStudentLeave;
+        }).toList();
+
+        // Sort by timestamp descending
+        leaves.sort((a, b) {
+          final aTime = (a.data() as Map<String, dynamic>)['timestamp'];
+          final bTime = (b.data() as Map<String, dynamic>)['timestamp'];
+          DateTime? aDt = aTime is Timestamp ? aTime.toDate() : (aTime is String ? DateTime.tryParse(aTime) : null);
+          DateTime? bDt = bTime is Timestamp ? bTime.toDate() : (bTime is String ? DateTime.tryParse(bTime) : null);
+          if (aDt == null) return 1;
+          if (bDt == null) return -1;
+          return bDt.compareTo(aDt);
+        });
+
+        if (leaves.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBg.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.primary.withOpacity(0.1)),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(Icons.event_busy_rounded, color: AppTheme.primary.withOpacity(0.3), size: 36),
+                  const SizedBox(height: 8),
+                  Text("No leave history for the past 30 days",
+                      style: TextStyle(color: AppTheme.textDark.withOpacity(0.5), fontSize: 13)),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: leaves.length,
+          itemBuilder: (context, index) {
+            final data = leaves[index].data() as Map<String, dynamic>;
+            final type = data['type'] ?? 'student';
+            final status = data['status'] ?? 'pending';
+            final reason = data['reason'] ?? '';
+            final fromDate = data['fromDate'] ?? '';
+            final toDate = data['toDate'] ?? '';
+            final name = type == 'student' ? (data['studentName'] ?? 'Student') : (data['teacherName'] ?? 'Teacher');
+
+            Color statusColor = Colors.orange;
+            if (status == 'approved') statusColor = Colors.green;
+            if (status == 'rejected') statusColor = Colors.red;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.cardBg.withOpacity(0.85),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.primary.withOpacity(0.12)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      type == 'student' ? Icons.face_rounded : Icons.person_rounded,
+                      color: AppTheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textDark)),
+                        const SizedBox(height: 2),
+                        Text(
+                          "Reason: $reason",
+                          style: TextStyle(color: AppTheme.textDark.withOpacity(0.6), fontSize: 12),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "$fromDate to $toDate",
+                          style: TextStyle(color: AppTheme.textDark.withOpacity(0.4), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

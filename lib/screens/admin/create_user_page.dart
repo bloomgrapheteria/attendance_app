@@ -27,6 +27,7 @@ class _CreateUserPageState extends State<CreateUserPage> {
     'teacher':   {'icon': Icons.person_rounded,   'label': 'Teacher'},
     'principal': {'icon': Icons.school_rounded,   'label': 'Principal'},
     'watchman':  {'icon': Icons.security_rounded, 'label': 'Watchman'},
+    'crc':       {'icon': Icons.visibility_rounded, 'label': 'CRC'},
   };
 
   Future<void> _createUser() async {

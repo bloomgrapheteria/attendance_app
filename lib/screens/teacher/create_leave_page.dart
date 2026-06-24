@@ -10,9 +10,18 @@ class CreateLeavePage extends StatefulWidget {
 }
 
 class _CreateLeavePageState extends State<CreateLeavePage> {
-  final reasonController   = TextEditingController();
   final fromDateController = TextEditingController();
   final toDateController   = TextEditingController();
+  final otherReasonController = TextEditingController();
+
+  String selectedReasonOption = 'sick-hospital';
+  final List<String> reasonOptions = [
+    'sick-hospital',
+    'sick-home',
+    'panchayat office',
+    'bank',
+    'other'
+  ];
 
   String leaveType = "student";
 
@@ -104,7 +113,11 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
   }
 
   Future<void> submitLeave() async {
-    if (reasonController.text.isEmpty ||
+    final finalReason = selectedReasonOption == 'other'
+        ? otherReasonController.text.trim()
+        : selectedReasonOption;
+
+    if (finalReason.isEmpty ||
         fromDateController.text.isEmpty ||
         toDateController.text.isEmpty) {
       _snack("Fill all fields");
@@ -135,7 +148,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
         'studentName' : selectedStudentName,
         'grNumber'    : selectedGR,
         'classId'     : selectedClass,
-        'reason'      : reasonController.text.trim(),
+        'reason'      : finalReason,
         'isToday'     : isToday,
         'fromDate'    : isToday ? today : fromDateController.text,
         'toDate'      : isToday ? today : toDateController.text,
@@ -153,7 +166,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
         'type'         : 'teacher',
         'teacherName'  : selectedTeacherName,
         'teacherEmail' : selectedTeacherEmail,
-        'reason'       : reasonController.text.trim(),
+        'reason'       : finalReason,
         'isToday'      : isToday,
         'fromDate'     : isToday ? today : fromDateController.text,
         'toDate'       : isToday ? today : toDateController.text,
@@ -550,12 +563,46 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                         const SizedBox(height: 24),
                         _sectionLabel("LEAVE DETAILS"),
 
-                        // ── Reason field ──────────────────────
-                        _textField(
-                            controller: reasonController,
-                            label: "Reason for Leave",
-                            icon: Icons.info_outline_rounded,
-                            maxLines: 2),
+                        // ── Reason Selection Dropdown ────────
+                        _card(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: selectedReasonOption,
+                              isExpanded: true,
+                              dropdownColor: _cardBg,
+                              icon: const Icon(Icons.arrow_drop_down_rounded, color: _warmBrown),
+                              style: const TextStyle(color: _warmBrown, fontWeight: FontWeight.w600, fontSize: 14),
+                              onChanged: (String? newValue) {
+                                if (newValue != null) {
+                                  setState(() {
+                                    selectedReasonOption = newValue;
+                                  });
+                                }
+                              },
+                              items: reasonOptions.map<DropdownMenuItem<String>>((String value) {
+                                return DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline_rounded, size: 18, color: _warmBrown),
+                                      const SizedBox(width: 10),
+                                      Text(value),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ),
+
+                        if (selectedReasonOption == 'other') ...[
+                          const SizedBox(height: 12),
+                          _textField(
+                              controller: otherReasonController,
+                              label: "Specify Reason for Leave",
+                              icon: Icons.edit_note_rounded,
+                              maxLines: 2),
+                        ],
 
                         const SizedBox(height: 12),
 
