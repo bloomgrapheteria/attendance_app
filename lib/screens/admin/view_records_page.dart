@@ -293,9 +293,37 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
   }
 
   Future<void> deleteRecord(String docId) async {
+    if (collectionName == 'classes') {
+      // 1. Delete all students in this class
+      final studentsSnap = await FirebaseFirestore.instance
+          .collection('students')
+          .where('classId', isEqualTo: docId)
+          .get();
+      
+      final batch = FirebaseFirestore.instance.batch();
+      for (var doc in studentsSnap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      // 2. Clear classId for teachers assigned to this class
+      final teachersSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', isEqualTo: 'teacher')
+          .where('classId', isEqualTo: docId)
+          .get();
+      
+      final teacherBatch = FirebaseFirestore.instance.batch();
+      for (var doc in teachersSnap.docs) {
+        teacherBatch.update(doc.reference, {'classId': FieldValue.delete()});
+      }
+      await teacherBatch.commit();
+    }
+
     await FirebaseFirestore.instance.collection(collectionName).doc(docId).delete();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted")));
+    final message = collectionName == 'classes' ? "Class and all its students deleted" : "Deleted";
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ─── Users / Students list ─────────────────────────────────────────────────

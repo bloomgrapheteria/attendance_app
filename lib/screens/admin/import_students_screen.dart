@@ -69,6 +69,12 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
 
     if (result == null) return;
 
+    setState(() {
+      loading = true;
+      total = 0;
+      progress = 0;
+    });
+
     final file = result.files.single;
     final ext = file.extension?.toLowerCase();
 
@@ -108,7 +114,11 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
       await processRows(rows);
 
     } catch (e) {
-      if (!mounted) return;
+      if (mounted) {
+        setState(() {
+          loading = false;
+        });
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -199,6 +209,9 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
       if (student != null) students.add(student);
     }
     total = students.length;
+    setState(() {
+      loading = false;
+    });
     showPreviewDialog(students, errors);
   }
 
@@ -502,16 +515,18 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
         }
       }
 
+      final List<Future<void>> updates = [];
       for (var entry in classCounts.entries) {
         final cId = entry.key;
         final counts = entry.value;
-        await _firestore.collection('classes').doc(cId).update({
+        updates.add(_firestore.collection('classes').doc(cId).update({
           'totalStudents': counts['total'],
           'boys': counts['boys'],
           'girls': counts['girls'],
           'updatedAt': FieldValue.serverTimestamp(),
-        });
+        }));
       }
+      await Future.wait(updates);
     } catch (e) {
       errors.add("Error updating class counts: $e");
     }

@@ -420,7 +420,7 @@ class Query {
       if (coll == collectionPath) fetch();
     });
 
-    final timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => fetch());
+    final timer = Timer.periodic(const Duration(seconds: 8), (_) => fetch());
 
     controller.onCancel = () {
       sub.cancel();
@@ -464,9 +464,8 @@ class WriteBatch {
   }
 
   Future<void> commit() async {
-    for (final op in _operations) {
-      await op();
-    }
+    if (_operations.isEmpty) return;
+    await Future.wait(_operations.map((op) => op()));
   }
 }
 
