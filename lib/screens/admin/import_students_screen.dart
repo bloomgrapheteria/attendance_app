@@ -769,7 +769,7 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
               ),
               const SizedBox(height: 8),
               Container(
-                maxHeight: 120,
+                constraints: const BoxConstraints(maxHeight: 120),
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
