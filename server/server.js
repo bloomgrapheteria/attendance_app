@@ -207,6 +207,191 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+app.post('/api/bulk/students', async (req, res) => {
+  const { students, action, schoolId } = req.body;
+  if (!Array.isArray(students) || !students.length) {
+    return res.status(400).json({ error: 'No students provided' });
+  }
+
+  try {
+    const studentsColl = db.collection('students');
+    const classesColl = db.collection('classes');
+
+    // 1. Get existing students for this school to check duplicate GRs
+    const query = { schoolId };
+    const existingStudents = await studentsColl.find(query).toArray();
+    const existingGRs = new Set(existingStudents.map(s => s._id));
+
+    // 2. Fetch existing classes to prevent duplicate class creations
+    const existingClasses = await classesColl.find({ schoolId }).toArray();
+    const existingClassesMap = new Map();
+    for (const c of existingClasses) {
+      const canonical = c._id.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      existingClassesMap.set(canonical, c._id);
+    }
+
+    let success = 0;
+    let skipped = 0;
+    const errors = [];
+    const bulkOps = [];
+    const classOps = [];
+
+    // Temporary map for classes created in this run to avoid duplicate creations
+    const createdClasses = new Set();
+
+    for (const student of students) {
+      // Ensure schoolId is present in student record
+      student.schoolId = schoolId;
+
+      // Extract GR number as the primary key
+      const gr = student.grNumber;
+      if (!gr) {
+        skipped++;
+        errors.push(`Missing GR number for student: ${student.name || 'Unknown'}`);
+        continue;
+      }
+
+      // Map classId
+      const classId = student.classId;
+      if (classId) {
+        const normalized = classId.trim();
+        const canonical = normalized.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+        let targetClassDocId = normalized;
+        if (existingClassesMap.has(canonical)) {
+          targetClassDocId = existingClassesMap.get(canonical);
+        } else if (!createdClasses.has(canonical)) {
+          // Setup class creation
+          classOps.push({
+            updateOne: {
+              filter: { _id: `${schoolId}_${normalized}` },
+              update: {
+                $setOnInsert: {
+                  _id: `${schoolId}_${normalized}`,
+                  name: normalized,
+                  schoolId,
+                  totalStudents: 0,
+                  boys: 0,
+                  girls: 0,
+                  updatedAt: new Date()
+                }
+              },
+              upsert: true
+            }
+          });
+          createdClasses.add(canonical);
+          existingClassesMap.set(canonical, `${schoolId}_${normalized}`);
+          targetClassDocId = `${schoolId}_${normalized}`;
+        } else {
+          targetClassDocId = `${schoolId}_${normalized}`;
+        }
+        student.classId = targetClassDocId;
+      }
+
+      // Format date fields
+      if (student.createdAt && typeof student.createdAt === 'string') student.createdAt = new Date(student.createdAt);
+      else student.createdAt = new Date();
+      if (student.dob && typeof student.dob === 'string') student.dob = new Date(student.dob);
+
+      // Resolve duplicate GR action
+      const exists = existingGRs.has(`${schoolId}_${gr}`);
+      const resolvedId = `${schoolId}_${gr}`;
+
+      student._id = resolvedId;
+
+      if (exists) {
+        if (action === 'skip') {
+          skipped++;
+          errors.push(`Skipped duplicate GR: ${gr}`);
+          continue;
+        }
+        if (action === 'overwrite') {
+          bulkOps.push({
+            replaceOne: {
+              filter: { _id: resolvedId },
+              replacement: student,
+              upsert: true
+            }
+          });
+          success++;
+        }
+      } else {
+        bulkOps.push({
+          insertOne: {
+            document: student
+          }
+        });
+        success++;
+      }
+    }
+
+    // Run class operations first if any
+    if (classOps.length) {
+      await classesColl.bulkWrite(classOps);
+    }
+
+    // Run student bulk operations
+    if (bulkOps.length) {
+      await studentsColl.bulkWrite(bulkOps);
+    }
+
+    // 4. Recalculate Class Counts (boys, girls, total) in MongoDB
+    const pipeline = [
+      { $match: { schoolId } },
+      {
+        $group: {
+          _id: '$classId',
+          total: { $sum: 1 },
+          boys: {
+            $sum: {
+              $cond: [
+                { $in: ['$gender', ['male', 'boy', 'm']] },
+                1,
+                0
+              ]
+            }
+          },
+          girls: {
+            $sum: {
+              $cond: [
+                { $in: ['$gender', ['female', 'girl', 'f']] },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ];
+
+    const counts = await studentsColl.aggregate(pipeline).toArray();
+    const classCountUpdates = counts
+      .filter(c => c._id) // ignore empty classId
+      .map(c => ({
+        updateOne: {
+          filter: { _id: c._id },
+          update: {
+            $set: {
+              totalStudents: c.total,
+              boys: c.boys,
+              girls: c.girls,
+              updatedAt: new Date()
+            }
+          }
+        }
+      }));
+
+    if (classCountUpdates.length) {
+      await classesColl.bulkWrite(classCountUpdates);
+    }
+
+    res.json({ success: true, successCount: success, skippedCount: skipped, errors });
+  } catch (err) {
+    console.error('Bulk import error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- GENERIC REST CRUD APIs ---
 app.get('/api/documents/:collection', async (req, res) => {
   const { collection } = req.params;

@@ -33,6 +33,9 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
   int  _uploadSuccess = 0;
   int  _uploadSkipped = 0;
 
+  // live upload errors
+  List<String> _currentErrors = [];
+
   // ════════════════════════════════════════════════════════════════
   // DOWNLOAD SAMPLE CSV
   // ════════════════════════════════════════════════════════════════
@@ -419,116 +422,87 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
       DuplicateAction action,
       List<String> initialErrors,
       ) async {
-    setState(() { loading = true; progress = 0; });
+    setState(() {
+      loading = true;
+      progress = 0;
+      total = students.length;
+      _currentErrors = [...initialErrors];
+    });
 
     int success = 0, skipped = 0;
-    List<String> errors = [...initialErrors];
 
-    final existingSnapshot = await _firestore.collection('students').get();
-    final existingGRs = existingSnapshot.docs.map((e) => e.id).toSet();
+    try {
+      final existingSnapshot = await _firestore.collection('students').get();
+      final existingGRs = existingSnapshot.docs.map((e) => e.id).toSet();
 
-    // Fetch existing classes and build a case/space/hyphen-insensitive canonical mapping
-    final classesSnapshot = await _firestore.collection('classes').get();
-    final Map<String, String> existingClassesMap = {};
-    for (var doc in classesSnapshot.docs) {
-      final docId = doc.id;
-      final canonical = docId.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-      existingClassesMap[canonical] = docId;
-    }
+      final List<Map<String, dynamic>> studentsToSend = [];
 
-    const chunkSize = 50;
-    for (int i = 0; i < students.length; i += chunkSize) {
-      final chunk = students.skip(i).take(chunkSize);
-      WriteBatch batch = _firestore.batch();
-
-      for (var student in chunk) {
-        // Auto-create class if it doesn't exist
-        final classId = student['classId'];
-        if (classId != null && classId.toString().isNotEmpty) {
-          final normalized = classId.toString().trim();
-          final canonical = normalized.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
-
-          String targetClassDocId;
-          if (existingClassesMap.containsKey(canonical)) {
-            targetClassDocId = existingClassesMap[canonical]!;
-          } else {
-            targetClassDocId = normalized; // e.g. "12-A"
-            await _firestore.collection('classes').doc(targetClassDocId).set({
-              'name': targetClassDocId,
-              'totalStudents': 0,
-              'boys': 0,
-              'girls': 0,
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-            existingClassesMap[canonical] = targetClassDocId;
-          }
-          student['classId'] = targetClassDocId;
-        }
-
-        final gr     = student['grNumber'];
-        final docRef = _firestore.collection('students').doc(gr);
+      // Resolve user-interactive GR reassignments before bulk uploading
+      for (var student in students) {
+        final gr = student['grNumber'];
         final exists = existingGRs.contains(gr);
 
-        if (exists) {
-          if (action == DuplicateAction.skip)      { skipped++; errors.add("Skipped duplicate GR: $gr"); continue; }
-          if (action == DuplicateAction.overwrite) { batch.set(docRef, student); success++; continue; }
-          if (action == DuplicateAction.reassign) {
-            final newGr = await askNewGr(gr);
-            if (newGr == null || newGr.isEmpty) { skipped++; errors.add("Skipped GR: $gr"); continue; }
-            if (existingGRs.contains(newGr))    { errors.add("New GR exists: $newGr"); skipped++; continue; }
-            final oldDoc = existingSnapshot.docs.firstWhere((d) => d.id == gr);
-            batch.set(_firestore.collection('students').doc(newGr), {...oldDoc.data(), 'grNumber': newGr});
-            batch.set(docRef, student);
-            existingGRs.add(newGr);
-            success++;
+        if (exists && action == DuplicateAction.reassign) {
+          final newGr = await askNewGr(gr);
+          if (newGr == null || newGr.isEmpty) {
+            skipped++;
+            _currentErrors.add("Skipped GR: $gr");
+            setState(() {});
+            continue;
           }
-        } else {
-          batch.set(docRef, student);
-          success++;
-        }
-        progress++;
-      }
+          if (existingGRs.contains(newGr)) {
+            _currentErrors.add("New GR exists: $newGr");
+            skipped++;
+            setState(() {});
+            continue;
+          }
 
-      await batch.commit();
-      setState(() {});
-      await Future.delayed(const Duration(milliseconds: 50));
-    }
-
-    // Recalculate and update student counts for all classes in database to ensure accuracy
-    try {
-      final updatedStudentsSnapshot = await _firestore.collection('students').get();
-      final Map<String, Map<String, int>> classCounts = {};
-      for (var doc in updatedStudentsSnapshot.docs) {
-        final data = doc.data();
-        final cId = data['classId']?.toString();
-        if (cId == null || cId.isEmpty) continue;
-        final gender = data['gender']?.toString().toLowerCase() ?? '';
-        
-        classCounts.putIfAbsent(cId, () => {'total': 0, 'boys': 0, 'girls': 0});
-        classCounts[cId]!['total'] = (classCounts[cId]!['total'] ?? 0) + 1;
-        if (gender == 'male' || gender == 'boy' || gender == 'm') {
-          classCounts[cId]!['boys'] = (classCounts[cId]!['boys'] ?? 0) + 1;
-        } else if (gender == 'female' || gender == 'girl' || gender == 'f') {
-          classCounts[cId]!['girls'] = (classCounts[cId]!['girls'] ?? 0) + 1;
+          // We clone the student map and set the new GR
+          final updatedStudent = Map<String, dynamic>.from(student);
+          updatedStudent['grNumber'] = newGr;
+          existingGRs.add(newGr);
+          studentsToSend.add(updatedStudent);
         } else {
-          classCounts[cId]!['boys'] = (classCounts[cId]!['boys'] ?? 0) + 1;
+          studentsToSend.add(student);
         }
       }
 
-      final List<Future<void>> updates = [];
-      for (var entry in classCounts.entries) {
-        final cId = entry.key;
-        final counts = entry.value;
-        updates.add(_firestore.collection('classes').doc(cId).update({
-          'totalStudents': counts['total'],
-          'boys': counts['boys'],
-          'girls': counts['girls'],
-          'updatedAt': FieldValue.serverTimestamp(),
-        }));
+      if (studentsToSend.isEmpty) {
+        setState(() {
+          loading = false;
+          _uploadDone = true;
+          _uploadSuccess = 0;
+          _uploadSkipped = skipped;
+        });
+        showSummary(0, skipped, _currentErrors);
+        return;
       }
-      await Future.wait(updates);
+
+      // Convert DateTimes/serverTimestamp values to serializable Strings
+      final serializableStudents = studentsToSend.map((s) {
+        final clean = Map<String, dynamic>.from(s);
+        if (clean['dob'] is DateTime) {
+          clean['dob'] = (clean['dob'] as DateTime).toIso8601String();
+        }
+        clean.remove('createdAt'); // Server will inject this
+        return clean;
+      }).toList();
+
+      // Trigger the backend bulk import (performs insertions, class lookups, recounts in one call!)
+      final bulkActionStr = action == DuplicateAction.reassign ? 'overwrite' : action.name;
+      final result = await MongoDBService.bulkImportStudents(serializableStudents, bulkActionStr);
+
+      success = result['successCount'] ?? 0;
+      skipped += result['skippedCount'] as int? ?? 0;
+      if (result['errors'] != null) {
+        _currentErrors.addAll((result['errors'] as List).cast<String>());
+      }
+      
+      // Update progress to 100% on success
+      progress = total;
+
     } catch (e) {
-      errors.add("Error updating class counts: $e");
+      _currentErrors.add("Import failed: $e");
     }
 
     setState(() {
@@ -538,7 +512,7 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
       _uploadSkipped = skipped;
     });
 
-    showSummary(success, skipped, errors);
+    showSummary(success, skipped, _currentErrors);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -727,31 +701,108 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
     final pct = total > 0 ? progress / total : 0.0;
     return Center(
       child: Container(
-        margin: const EdgeInsets.all(30),
-        padding: const EdgeInsets.all(26),
+        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: AppTheme.cardBg.withOpacity(0.88),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppTheme.primary.withOpacity(0.15)),
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 2.5),
-          const SizedBox(height: 18),
-          Text("Importing Students…",
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textDark)),
-          const SizedBox(height: 4),
-          Text("$progress of $total records",
-              style: TextStyle(fontSize: 12, color: AppTheme.textDark.withOpacity(0.5))),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: pct, minHeight: 5,
-              backgroundColor: AppTheme.primary.withOpacity(0.1),
-              color: AppTheme.primary,
+          color: AppTheme.cardBg.withOpacity(0.92),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 25,
+              offset: const Offset(0, 10),
             ),
-          ),
-        ]),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 10),
+            _BeautifulUploadAnimation(progress: pct),
+            const SizedBox(height: 24),
+            Text(
+              "Importing Students...",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textDark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "$progress of $total records processed (${(pct * 100).toInt()}%)",
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textDark.withOpacity(0.6),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 18),
+            // Glowing Linear Progress Bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 8,
+                backgroundColor: AppTheme.primary.withOpacity(0.1),
+                color: AppTheme.primary,
+              ),
+            ),
+            
+            // Real-time Errors Display if any exist
+            if (_currentErrors.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Divider(height: 1, color: AppTheme.primary.withOpacity(0.15)),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "ERRORS / WARNINGS DURING UPLOAD",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.redAccent,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                maxHeight: 120,
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withOpacity(0.15)),
+                ),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _currentErrors.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3.5),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _currentErrors[index],
+                              style: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1038,6 +1089,85 @@ class _CsvRow extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ── Beautiful Upload Animation ─────────────────────────────────────
+class _BeautifulUploadAnimation extends StatefulWidget {
+  final double progress;
+  const _BeautifulUploadAnimation({required this.progress});
+
+  @override
+  State<_BeautifulUploadAnimation> createState() => _BeautifulUploadAnimationState();
+}
+
+class _BeautifulUploadAnimationState extends State<_BeautifulUploadAnimation> with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.88, end: 1.12).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Outer glowing pulsing ring
+          ScaleTransition(
+            scale: _pulseAnimation,
+            child: Container(
+              width: 105,
+              height: 105,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primary.withOpacity(0.06),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primary.withOpacity(0.18),
+                    blurRadius: 18,
+                    spreadRadius: 3,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Inner progress track ring
+          SizedBox(
+            width: 84,
+            height: 84,
+            child: CircularProgressIndicator(
+              value: widget.progress,
+              strokeWidth: 4,
+              backgroundColor: AppTheme.primary.withOpacity(0.12),
+              color: AppTheme.primary,
+            ),
+          ),
+          // Pulsing Upload icon
+          const Icon(
+            Icons.cloud_upload_rounded,
+            size: 38,
+            color: AppTheme.primary,
+          ),
+        ],
+      ),
     );
   }
 }

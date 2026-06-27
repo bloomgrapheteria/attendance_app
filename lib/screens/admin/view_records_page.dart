@@ -46,7 +46,10 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
     super.dispose();
   }
 
-  String get collectionName => selectedType == 'students' ? 'students' : 'users';
+  String get collectionName {
+    if (mainType == 'classes') return 'classes';
+    return selectedType == 'students' ? 'students' : 'users';
+  }
   bool isMatchingRole(Map<String, dynamic> data) =>
       selectedType == 'students' ? true : data['role'] == selectedType;
 
@@ -292,38 +295,84 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
     );
   }
 
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.cardBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: AppTheme.primary),
+                SizedBox(height: 15),
+                Text(
+                  "Deleting, please wait...",
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> deleteRecord(String docId) async {
-    if (collectionName == 'classes') {
-      // 1. Delete all students in this class
-      final studentsSnap = await FirebaseFirestore.instance
-          .collection('students')
-          .where('classId', isEqualTo: docId)
-          .get();
-      
-      final batch = FirebaseFirestore.instance.batch();
-      for (var doc in studentsSnap.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
+    _showLoadingDialog();
+    try {
+      if (collectionName == 'classes') {
+        // 1. Delete all students in this class
+        final studentsSnap = await FirebaseFirestore.instance
+            .collection('students')
+            .where('classId', isEqualTo: docId)
+            .get();
+        
+        final batch = FirebaseFirestore.instance.batch();
+        for (var doc in studentsSnap.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
 
-      // 2. Clear classId for teachers assigned to this class
-      final teachersSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'teacher')
-          .where('classId', isEqualTo: docId)
-          .get();
-      
-      final teacherBatch = FirebaseFirestore.instance.batch();
-      for (var doc in teachersSnap.docs) {
-        teacherBatch.update(doc.reference, {'classId': FieldValue.delete()});
+        // 2. Clear classId for teachers assigned to this class
+        final teachersSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .where('role', isEqualTo: 'teacher')
+            .where('classId', isEqualTo: docId)
+            .get();
+        
+        final teacherBatch = FirebaseFirestore.instance.batch();
+        for (var doc in teachersSnap.docs) {
+          teacherBatch.update(doc.reference, {'classId': FieldValue.delete()});
+        }
+        await teacherBatch.commit();
       }
-      await teacherBatch.commit();
+
+      await FirebaseFirestore.instance.collection(collectionName).doc(docId).delete();
+      if (!mounted) return;
+      final message = collectionName == 'classes' ? "Class and all its students deleted" : "Deleted";
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error deleting: $e")));
+      }
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop(); // Close the loading dialog
+      }
     }
-
-    await FirebaseFirestore.instance.collection(collectionName).doc(docId).delete();
-    if (!mounted) return;
-    final message = collectionName == 'classes' ? "Class and all its students deleted" : "Deleted";
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ─── Users / Students list ─────────────────────────────────────────────────
@@ -542,6 +591,24 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
                     const SizedBox(width: 6),
                     _MiniTag(label: "Girls ${classData['girls'] ?? 0}"),
                   ]),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () async {
+                          final confirm = await _showDeleteConfirm();
+                          if (confirm == true) {
+                            await deleteRecord(classDoc.id);
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      Icon(Icons.expand_more, color: AppTheme.primary.withOpacity(0.5)),
+                    ],
+                  ),
                   children: [
                     Divider(height: 1, indent: 16, endIndent: 16, color: AppTheme.primary.withOpacity(0.12)),
                     StreamBuilder<QuerySnapshot>(

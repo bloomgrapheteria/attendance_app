@@ -104,7 +104,7 @@ class _CacheEntry {
 // ── MONGO DATABASE MANAGER via REST API ───────────────────────────────────────
 class MongoDBService {
   static String get baseUrl {
-    return 'https://attendanceapp-backend.onrender.com/api';
+    return 'https://server-peach-mu-75.vercel.app/api';
   }
 
   static final StreamController<String> _dbUpdates = StreamController<String>.broadcast();
@@ -126,6 +126,37 @@ class MongoDBService {
   }
 
   static Stream<String> get updateStream => _dbUpdates.stream;
+
+  static Future<Map<String, dynamic>> bulkImportStudents(List<Map<String, dynamic>> students, String action) async {
+    final schoolId = FirebaseAuth.instance.currentSchoolId;
+    if (schoolId == null) {
+      throw Exception("User is not associated with any school.");
+    }
+
+    final payload = {
+      'students': students,
+      'action': action,
+      'schoolId': schoolId,
+    };
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/bulk/students'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(jsonDecode(response.body)['error'] ?? 'Bulk import failed');
+    }
+
+    // Invalidate local caches for classes and students so they live-refresh!
+    invalidateCache('students');
+    invalidateCache('classes');
+    notifyUpdate('students');
+    notifyUpdate('classes');
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 
   static Future<dynamic> getCached(String key, Future<dynamic> Function() fetcher, {Duration maxAge = const Duration(seconds: 4)}) async {
     final now = DateTime.now();
