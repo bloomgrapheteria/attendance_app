@@ -95,6 +95,12 @@ class Timestamp implements Comparable<Timestamp> {
   String toString() => 'Timestamp(seconds=$seconds, nanoseconds=$nanoseconds)';
 }
 
+class _CacheEntry {
+  final dynamic data;
+  final DateTime timestamp;
+  _CacheEntry(this.data, this.timestamp);
+}
+
 // ── MONGO DATABASE MANAGER via REST API ───────────────────────────────────────
 class MongoDBService {
   static String get baseUrl {
@@ -102,17 +108,41 @@ class MongoDBService {
   }
 
   static final StreamController<String> _dbUpdates = StreamController<String>.broadcast();
+  static final Map<String, _CacheEntry> _cache = {};
 
   static Future<void> init() async {
     print("REST API client initialized. Base URL: $baseUrl");
+    // Non-blocking background ping to warm up the backend server (mitigates Render/serverless cold starts)
+    unawaited(
+      http.get(Uri.parse('$baseUrl/documents/schools?limit=1'))
+        .timeout(const Duration(seconds: 15))
+        .catchError((_) => http.Response('', 500))
+    );
   }
 
   static void notifyUpdate(String collectionName) {
+    invalidateCache(collectionName);
     _dbUpdates.add(collectionName);
   }
 
   static Stream<String> get updateStream => _dbUpdates.stream;
+
+  static Future<dynamic> getCached(String key, Future<dynamic> Function() fetcher, {Duration maxAge = const Duration(seconds: 4)}) async {
+    final now = DateTime.now();
+    final entry = _cache[key];
+    if (entry != null && now.difference(entry.timestamp) < maxAge) {
+      return entry.data;
+    }
+    final data = await fetcher();
+    _cache[key] = _CacheEntry(data, now);
+    return data;
+  }
+
+  static void invalidateCache(String collection) {
+    _cache.removeWhere((key, value) => key.startsWith('doc:$collection:') || key.startsWith('query:$collection:'));
+  }
 }
+
 
 // ── FIRESTORE SHIM IMPLEMENTATION ────────────────────────────────────────────
 
@@ -236,7 +266,7 @@ class DocumentReference {
     MongoDBService.notifyUpdate(collectionPath);
   }
 
-  Future<DocumentSnapshot> get() async {
+  Future<DocumentSnapshot> _fetchRaw() async {
     final response = await http.get(
       Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
     );
@@ -257,6 +287,12 @@ class DocumentReference {
     return DocumentSnapshot(id, doc, collectionPath);
   }
 
+  Future<DocumentSnapshot> get() async {
+    final cacheKey = 'doc:$collectionPath:$_resolvedId';
+    final dynamic cached = await MongoDBService.getCached(cacheKey, () => _fetchRaw(), maxAge: const Duration(seconds: 4));
+    return cached as DocumentSnapshot;
+  }
+
   Stream<DocumentSnapshot> snapshots() {
     final controller = StreamController<DocumentSnapshot>();
     
@@ -272,7 +308,8 @@ class DocumentReference {
       if (coll == collectionPath) fetch();
     });
 
-    final timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => fetch());
+    final timer = Timer.periodic(const Duration(seconds: 10), (_) => fetch());
+
 
     controller.onCancel = () {
       sub.cancel();
@@ -361,7 +398,7 @@ class Query {
     return Query(collectionPath, _filters, _limit, field, descending);
   }
 
-  Future<QuerySnapshot> get() async {
+  Future<QuerySnapshot> _fetchRaw() async {
     final schoolId = FirebaseAuth.instance.currentSchoolId;
     final Map<String, dynamic> activeFilters = Map<String, dynamic>.from(_filters);
     
@@ -405,6 +442,22 @@ class Query {
     return QuerySnapshot(docs);
   }
 
+  Future<QuerySnapshot> get() async {
+    final schoolId = FirebaseAuth.instance.currentSchoolId;
+    final Map<String, dynamic> activeFilters = Map<String, dynamic>.from(_filters);
+    if (schoolId != null && 
+        collectionPath != 'schools' && 
+        collectionPath != 'users' && 
+        !activeFilters.containsKey('schoolId')) {
+      activeFilters['schoolId'] = schoolId;
+    }
+    final cleanFilters = _serializeForJson(activeFilters);
+    final cacheKey = 'query:$collectionPath:${jsonEncode(cleanFilters)}:$_limit:$_orderByField:$_orderByDescending';
+    
+    final dynamic cached = await MongoDBService.getCached(cacheKey, () => _fetchRaw(), maxAge: const Duration(seconds: 4));
+    return cached as QuerySnapshot;
+  }
+
   Stream<QuerySnapshot> snapshots() {
     final controller = StreamController<QuerySnapshot>();
 
@@ -420,7 +473,8 @@ class Query {
       if (coll == collectionPath) fetch();
     });
 
-    final timer = Timer.periodic(const Duration(seconds: 8), (_) => fetch());
+    final timer = Timer.periodic(const Duration(seconds: 20), (_) => fetch());
+
 
     controller.onCancel = () {
       sub.cancel();

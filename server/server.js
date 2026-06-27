@@ -42,8 +42,50 @@ async function migrateExistingPasswords() {
   }
 }
 
+// Middleware to ensure DB connection is established (handles serverless/Vercel contexts cleanly)
+let client;
+
+async function ensureDbConnected() {
+  if (db) return;
+  if (!client) {
+    console.log('Connecting to MongoDB Atlas...');
+    client = new MongoClient(MONGO_URI);
+    await client.connect();
+    db = client.db(DB_NAME);
+    console.log(`Connected to MongoDB database: ${DB_NAME}`);
+    
+    // Create/Verify indexes for optimal query speed
+    try {
+      await db.collection('users').createIndex({ email: 1 });
+      await db.collection('users').createIndex({ schoolId: 1 });
+      await db.collection('classes').createIndex({ schoolId: 1 });
+      await db.collection('students').createIndex({ schoolId: 1 });
+      await db.collection('students').createIndex({ classId: 1 });
+      await db.collection('attendance').createIndex({ schoolId: 1, date: 1 });
+      await db.collection('leave_requests').createIndex({ schoolId: 1 });
+      console.log('Database indexes successfully verified/created.');
+    } catch (idxErr) {
+      console.error('Failed to create indexes:', idxErr);
+    }
+
+    // Migrate plain-text passwords to SHA-256 hashes
+    await migrateExistingPasswords();
+  }
+}
+
+app.use(async (req, res, next) => {
+  try {
+    await ensureDbConnected();
+    next();
+  } catch (err) {
+    console.error('Database connection error:', err);
+    res.status(500).json({ error: 'Internal Server Error: Database connection failed' });
+  }
+});
+
 app.use(cors());
 app.use(express.json());
+
 
 // --- VALIDATION HELPER ---
 async function validateDocument(collection, id, data, isUpdate = false) {
@@ -264,20 +306,19 @@ app.delete('/api/documents/:collection/:id', async (req, res) => {
   }
 });
 
-// Start server after connecting to MongoDB
-MongoClient.connect(MONGO_URI)
-  .then(async client => {
-    db = client.db(DB_NAME);
-    console.log(`Connected to MongoDB database: ${DB_NAME}`);
-    
-    // Migrate plain-text passwords to SHA-256 hashes
-    await migrateExistingPasswords();
-
-    app.listen(PORT, () => {
-      console.log(`API Server running on port ${PORT}`);
+// Start server locally if run directly, otherwise export for Vercel Serverless Functions
+if (require.main === module) {
+  ensureDbConnected()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`API Server running on port ${PORT}`);
+      });
+    })
+    .catch(err => {
+      console.error('Failed to initialize server:', err);
+      process.exit(1);
     });
-  })
-  .catch(err => {
-    console.error('Failed to connect to MongoDB Atlas', err);
-    process.exit(1);
-  });
+}
+
+module.exports = app;
+
