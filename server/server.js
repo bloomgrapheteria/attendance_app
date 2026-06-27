@@ -257,10 +257,7 @@ app.post('/api/bulk/students', async (req, res) => {
         const normalized = classId.trim();
         const canonical = normalized.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-        let targetClassDocId = normalized;
-        if (existingClassesMap.has(canonical)) {
-          targetClassDocId = existingClassesMap.get(canonical);
-        } else if (!createdClasses.has(canonical)) {
+        if (!existingClassesMap.has(canonical) && !createdClasses.has(canonical)) {
           // Setup class creation
           classOps.push({
             updateOne: {
@@ -280,12 +277,9 @@ app.post('/api/bulk/students', async (req, res) => {
             }
           });
           createdClasses.add(canonical);
-          existingClassesMap.set(canonical, `${schoolId}_${normalized}`);
-          targetClassDocId = `${schoolId}_${normalized}`;
-        } else {
-          targetClassDocId = `${schoolId}_${normalized}`;
+          existingClassesMap.set(canonical, normalized);
         }
-        student.classId = targetClassDocId;
+        student.classId = normalized;
       }
 
       // Format date fields
@@ -369,7 +363,7 @@ app.post('/api/bulk/students', async (req, res) => {
       .filter(c => c._id) // ignore empty classId
       .map(c => ({
         updateOne: {
-          filter: { _id: c._id },
+          filter: { _id: `${schoolId}_${c._id}` },
           update: {
             $set: {
               totalStudents: c.total,

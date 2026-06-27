@@ -212,10 +212,14 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
       if (student != null) students.add(student);
     }
     total = students.length;
+    
+    // Asynchronously verify duplicate GR numbers while loading spinner is active
+    final duplicates = await findDuplicates(students);
+
     setState(() {
       loading = false;
     });
-    showPreviewDialog(students, errors);
+    showPreviewDialog(students, duplicates, errors);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -518,7 +522,7 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
   // ════════════════════════════════════════════════════════════════
   // DIALOGS  (same logic, themed shell)
   // ════════════════════════════════════════════════════════════════
-  void showPreviewDialog(List<Map<String, dynamic>> students, List<String> errors) {
+  void showPreviewDialog(List<Map<String, dynamic>> students, List<String> duplicates, List<String> errors) {
     showDialog(
       context: context,
       builder: (_) => _StyledDialog(
@@ -528,9 +532,8 @@ class _ImportStudentsScreenState extends State<ImportStudentsScreen> {
           _DBtn(
             label: "Continue",
             primary: true,
-            onTap: () async {
+            onTap: () {
               Navigator.pop(context);
-              final duplicates = await findDuplicates(students);
               if (duplicates.isEmpty) {
                 startImport(students, DuplicateAction.overwrite, errors);
               } else {

@@ -104,13 +104,6 @@ class AdminDashboard extends StatelessWidget {
                       const SizedBox(height: 10),
                       Row(children: [
                         Expanded(child: _ActionCard(
-                          icon: Icons.class_rounded,
-                          title: "Add / Edit\nClass",
-                          subtitle: "Manage class records",
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddClassPage())),
-                        )),
-                        const SizedBox(width: 12),
-                        Expanded(child: _ActionCard(
                           icon: Icons.person_add_alt_1_rounded,
                           title: "Add Student",
                           subtitle: "Register manually",
