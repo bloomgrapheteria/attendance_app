@@ -112,6 +112,8 @@ class MongoDBService {
 
   static Future<void> init() async {
     print("REST API client initialized. Base URL: $baseUrl");
+    // Restore authenticated session from SharedPreferences
+    await FirebaseAuth.initPrefs();
     // Non-blocking background ping to warm up the backend server (mitigates Render/serverless cold starts)
     unawaited(
       http.get(Uri.parse('$baseUrl/documents/schools?limit=1'))
