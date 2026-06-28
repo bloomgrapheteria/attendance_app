@@ -799,60 +799,71 @@ class _AssignClassButton extends StatelessWidget {
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.cardBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Text("Assign Class",
-            style: TextStyle(color: AppTheme.textDark, fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // No class option
-            ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.08),
-                child: Icon(Icons.not_interested_rounded, color: AppTheme.primary.withValues(alpha: 0.5), size: 18),
-              ),
-              title: Text("No Class", style: TextStyle(color: AppTheme.textDark.withValues(alpha: 0.6), fontSize: 13)),
-              onTap: () async {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(docId)
-                    .update({'classId': FieldValue.delete()});
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Class removed")));
-                }
-              },
+            Text("Assign Class",
+                style: TextStyle(color: AppTheme.textDark, fontWeight: FontWeight.bold, fontSize: 16)),
+            IconButton(
+              icon: Icon(Icons.close_rounded, color: AppTheme.textDark.withValues(alpha: 0.6), size: 20),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
-            const Divider(height: 1),
-            ...classes.map((c) => ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                child: Icon(Icons.class_rounded, color: AppTheme.primary, size: 18),
-              ),
-              title: Text(c.id, style: TextStyle(color: AppTheme.textDark, fontSize: 13, fontWeight: FontWeight.w500)),
-              trailing: currentClassId == c.id
-                  ? Icon(Icons.check_circle_rounded, color: AppTheme.primary, size: 18)
-                  : null,
-              onTap: () async {
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(docId)
-                    .update({'classId': c.id});
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text("Class assigned: ${c.id}")));
-                }
-              },
-            )),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 380,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // No class option
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primary.withValues(alpha: 0.08),
+                    child: Icon(Icons.not_interested_rounded, color: AppTheme.primary.withValues(alpha: 0.5), size: 18),
+                  ),
+                  title: Text("No Class", style: TextStyle(color: AppTheme.textDark.withValues(alpha: 0.6), fontSize: 13)),
+                  onTap: () async {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(docId)
+                        .update({'classId': FieldValue.delete()});
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Class removed")));
+                    }
+                  },
+                ),
+                const Divider(height: 1),
+                ...classes.map((c) => ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                    child: Icon(Icons.class_rounded, color: AppTheme.primary, size: 18),
+                  ),
+                  title: Text(c.id, style: TextStyle(color: AppTheme.textDark, fontSize: 13, fontWeight: FontWeight.w500)),
+                  trailing: currentClassId == c.id
+                      ? Icon(Icons.check_circle_rounded, color: AppTheme.primary, size: 18)
+                      : null,
+                  onTap: () async {
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(docId)
+                        .update({'classId': c.id});
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text("Class assigned: ${c.id}")));
+                    }
+                  },
+                )),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
