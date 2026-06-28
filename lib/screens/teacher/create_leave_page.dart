@@ -23,6 +23,37 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
     'other'
   ];
 
+  String? _currentUserRole;
+  String? _teacherClassId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInfo();
+  }
+
+  Future<void> _loadUserInfo() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final data = doc.data();
+      if (data != null) {
+        setState(() {
+          _currentUserRole = data['role'];
+          _teacherClassId = data['classId'];
+        });
+      }
+    } catch (e) {
+      print("Error loading user info: $e");
+    }
+  }
+
+  String? get _cleanTeacherClassId {
+    if (_teacherClassId == null) return null;
+    return _teacherClassId!.contains('_') ? _teacherClassId!.split('_').last : _teacherClassId;
+  }
+
   String leaveType = "student";
 
   String? selectedStudentName;
@@ -38,8 +69,16 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
   static const Color _terracotta = Color(0xFF8B3A0F);
   static const Color _cardBg     = Color(0xFFFFF8F0);
 
-  Stream<QuerySnapshot> getStudents() =>
-      FirebaseFirestore.instance.collection('students').snapshots();
+  Stream<QuerySnapshot> getStudents() {
+    final cleanClass = _cleanTeacherClassId;
+    if (_currentUserRole == 'teacher' && cleanClass != null) {
+      return FirebaseFirestore.instance
+          .collection('students')
+          .where('classId', isEqualTo: cleanClass)
+          .snapshots();
+    }
+    return FirebaseFirestore.instance.collection('students').snapshots();
+  }
 
   Stream<QuerySnapshot> getTeachers() =>
       FirebaseFirestore.instance

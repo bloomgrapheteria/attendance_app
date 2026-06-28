@@ -498,7 +498,11 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
 
           // Filter by relation: teacher email OR classId matches
           final isMyTeacherLeave = data['type'] == 'teacher' && data['teacherEmail'] == email;
-          final isMyStudentLeave = data['type'] == 'student' && _classId != null && data['classId'] == _classId;
+          
+          final cleanClassId = _classId != null && _classId!.contains('_') ? _classId!.split('_').last : _classId;
+          final cleanLeaveClassId = data['classId'] != null && data['classId'].toString().contains('_') ? data['classId'].toString().split('_').last : data['classId'];
+          
+          final isMyStudentLeave = data['type'] == 'student' && cleanClassId != null && cleanLeaveClassId == cleanClassId;
 
           if (!(isMyTeacherLeave || isMyStudentLeave)) return false;
 
