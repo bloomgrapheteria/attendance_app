@@ -42,6 +42,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
         setState(() {
           _currentUserRole = data['role'];
           _teacherClassId = data['classId'];
+          selectedClassDropdownVal = _cleanTeacherClassId;
         });
       }
     } catch (e) {
@@ -56,6 +57,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
 
   String leaveType = "student";
 
+  String? selectedClassDropdownVal;
   String? selectedStudentName;
   String? selectedGR;
   String? selectedTeacherName;
@@ -70,11 +72,10 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
   static const Color _cardBg     = Color(0xFFFFF8F0);
 
   Stream<QuerySnapshot> getStudents() {
-    final cleanClass = _cleanTeacherClassId;
-    if (_currentUserRole == 'teacher' && cleanClass != null) {
+    if (selectedClassDropdownVal != null && selectedClassDropdownVal!.isNotEmpty) {
       return FirebaseFirestore.instance
           .collection('students')
-          .where('classId', isEqualTo: cleanClass)
+          .where('classId', isEqualTo: selectedClassDropdownVal)
           .snapshots();
     }
     return FirebaseFirestore.instance.collection('students').snapshots();
@@ -431,6 +432,58 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                         ]),
 
                         const SizedBox(height: 24),
+
+                        // ── Class selector dropdown ────────────
+                        if (leaveType == "student") ...[
+                          _sectionLabel("SELECT CLASS"),
+                          StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance.collection('classes').snapshots(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) return const SizedBox();
+                              final classes = snapshot.data!.docs;
+                              
+                              final classList = classes.map((c) {
+                                return c.id.contains('_') ? c.id.split('_').last : c.id;
+                              }).toSet().toList();
+
+                              if (classList.isEmpty) return const SizedBox();
+
+                              if (selectedClassDropdownVal == null || !classList.contains(selectedClassDropdownVal)) {
+                                selectedClassDropdownVal = classList.first;
+                              }
+
+                              return _card(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: DropdownButtonHideUnderline(
+                                    child: DropdownButton<String>(
+                                      value: selectedClassDropdownVal,
+                                      isExpanded: true,
+                                      icon: const Icon(Icons.arrow_drop_down_rounded, color: _warmBrown),
+                                      dropdownColor: _cardBg,
+                                      style: const TextStyle(color: _warmBrown, fontSize: 14, fontWeight: FontWeight.w600),
+                                      onChanged: (newVal) {
+                                        setState(() {
+                                          selectedClassDropdownVal = newVal;
+                                          selectedStudentName = null;
+                                          selectedGR = null;
+                                        });
+                                      },
+                                      items: classList.map((String cName) {
+                                        return DropdownMenuItem<String>(
+                                          value: cName,
+                                          child: Text("Class $cName"),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
                         _sectionLabel(leaveType == 'student'
                             ? "SELECT STUDENT"
                             : "SELECT TEACHER"),
@@ -445,38 +498,39 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                               return _card(
                                 child: Autocomplete<String>(
                                   optionsBuilder: (text) {
-                                    if (text.text.isEmpty)
+                                    if (text.text.isEmpty) {
                                       return const Iterable<String>.empty();
+                                    }
                                     return students.map((doc) {
-                                      final data = doc.data()
-                                      as Map<String, dynamic>;
-                                      return "${data['name'] ?? 'Unknown'} (GR: ${data['grNumber']?.toString() ?? 'NA'})";
+                                      final data = doc.data() as Map<String, dynamic>;
+                                      final name = data['name'] ?? 'Unknown';
+                                      final gr = data['grNumber']?.toString() ?? 'NA';
+                                      final roll = data['rollNo'] != null ? " | Roll: ${data['rollNo']}" : "";
+                                      return "$name (GR: $gr$roll)";
                                     }).where((item) => item
                                         .toLowerCase()
-                                        .contains(
-                                        text.text.toLowerCase()));
+                                        .contains(text.text.toLowerCase()));
                                   },
                                   onSelected: (value) {
                                     final match = students.firstWhere((doc) {
-                                      final data = doc.data()
-                                      as Map<String, dynamic>;
-                                      return value
-                                          .contains(data['name'] ?? '');
+                                      final data = doc.data() as Map<String, dynamic>;
+                                      final name = data['name'] ?? '';
+                                      final gr = data['grNumber']?.toString() ?? '';
+                                      final roll = data['rollNo'] != null ? " | Roll: ${data['rollNo']}" : "";
+                                      final option = "$name (GR: $gr$roll)";
+                                      return value == option;
                                     });
-                                    final data = match.data()
-                                    as Map<String, dynamic>;
+                                    final data = match.data() as Map<String, dynamic>;
                                     setState(() {
-                                      selectedStudentName =
-                                          data['name'] ?? '';
-                                      selectedGR =
-                                          data['grNumber']?.toString() ??
-                                              '';
-                                      selectedClass =
-                                          data['classId'] ?? '';
+                                      selectedStudentName = data['name'] ?? '';
+                                      selectedGR = data['grNumber']?.toString() ?? '';
+                                      selectedClass = data['classId'] ?? '';
                                     });
                                   },
-                                  fieldViewBuilder:
-                                      (context, controller, focusNode, _) {
+                                  fieldViewBuilder: (context, controller, focusNode, _) {
+                                    if (selectedStudentName != null && controller.text.isEmpty) {
+                                      controller.text = selectedStudentName!;
+                                    }
                                     return TextField(
                                       controller: controller,
                                       focusNode: focusNode,
@@ -484,18 +538,15 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                                           color: _warmBrown.withOpacity(0.9),
                                           fontSize: 14),
                                       decoration: InputDecoration(
-                                        labelText: "Search by name or GR...",
+                                        labelText: "Search by Name, GR, or Roll No...",
                                         prefixIcon: Icon(Icons.search_rounded,
-                                            color:
-                                            _warmBrown.withOpacity(0.4),
+                                            color: _warmBrown.withOpacity(0.4),
                                             size: 20),
                                         border: InputBorder.none,
                                         labelStyle: TextStyle(
-                                            color:
-                                            _warmBrown.withOpacity(0.5),
+                                            color: _warmBrown.withOpacity(0.5),
                                             fontSize: 13),
-                                        contentPadding:
-                                        const EdgeInsets.symmetric(
+                                        contentPadding: const EdgeInsets.symmetric(
                                             horizontal: 0, vertical: 14),
                                       ),
                                     );

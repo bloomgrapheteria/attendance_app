@@ -493,7 +493,15 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           } else if (timestamp is String) {
             dt = DateTime.tryParse(timestamp);
           }
-          if (dt == null) return false;
+          
+          // Fallback to fromDate if timestamp is null
+          if (dt == null && data['fromDate'] != null) {
+            dt = DateTime.tryParse(data['fromDate'].toString());
+          }
+          
+          // If still null, default to now so it is not hidden
+          dt ??= DateTime.now();
+
           if (dt.isBefore(oneMonthAgo)) return false;
 
           // Filter by relation: teacher email OR classId matches
@@ -514,10 +522,18 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
 
         // Sort by timestamp descending
         leaves.sort((a, b) {
-          final aTime = (a.data() as Map<String, dynamic>)['timestamp'];
-          final bTime = (b.data() as Map<String, dynamic>)['timestamp'];
+          final aData = a.data() as Map<String, dynamic>;
+          final bData = b.data() as Map<String, dynamic>;
+          
+          final aTime = aData['timestamp'];
+          final bTime = bData['timestamp'];
+          
           DateTime? aDt = aTime is Timestamp ? aTime.toDate() : (aTime is String ? DateTime.tryParse(aTime) : null);
           DateTime? bDt = bTime is Timestamp ? bTime.toDate() : (bTime is String ? DateTime.tryParse(bTime) : null);
+          
+          aDt ??= aData['fromDate'] != null ? DateTime.tryParse(aData['fromDate'].toString()) : null;
+          bDt ??= bData['fromDate'] != null ? DateTime.tryParse(bData['fromDate'].toString()) : null;
+          
           if (aDt == null) return 1;
           if (bDt == null) return -1;
           return bDt.compareTo(aDt);
