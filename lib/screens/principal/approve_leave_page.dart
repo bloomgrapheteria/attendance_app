@@ -67,6 +67,8 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
     if (confirmed == true) await _updateStatus(docId, 'rejected');
   }
 
+  bool _showOnlyCurrentDay = true;
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -103,24 +105,48 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                 final all = snap.data?.docs.length ?? 0;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: WC.brown,
-                        borderRadius: BorderRadius.circular(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: WC.brown,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text("All  ($all)",
+                            style: const TextStyle(color: Colors.white,
+                                fontWeight: FontWeight.bold, fontSize: 13)),
                       ),
-                      child: Text("All  ($all)",
-                          style: const TextStyle(color: Colors.white,
-                              fontWeight: FontWeight.bold, fontSize: 13)),
-                    ),
-                  ]),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _showOnlyCurrentDay = !_showOnlyCurrentDay;
+                          });
+                        },
+                        icon: Icon(
+                          _showOnlyCurrentDay ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                          color: WC.brown,
+                          size: 18,
+                        ),
+                        label: Text(
+                          _showOnlyCurrentDay ? "Show Previous" : "Hide Previous",
+                          style: TextStyle(
+                            color: WC.brown,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
 
             Expanded(child: _LeaveList(
                 filter: 'all',
+                showOnlyCurrentDay: _showOnlyCurrentDay,
                 onUpdate: _updateStatus,
                 onReject: _confirmReject)),
           ]),
@@ -135,11 +161,49 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
 // ─────────────────────────────────────────────
 class _LeaveList extends StatelessWidget {
   final String filter;
+  final bool showOnlyCurrentDay;
   final Future<void> Function(String, String) onUpdate;
   final Future<void> Function(String) onReject;
 
-  const _LeaveList(
-      {required this.filter, required this.onUpdate, required this.onReject});
+  const _LeaveList({
+    required this.filter,
+    required this.showOnlyCurrentDay,
+    required this.onUpdate,
+    required this.onReject,
+  });
+
+  bool _isCurrentDay(Map<String, dynamic> data) {
+    // 1. Check if timestamp is today
+    final ts = data['timestamp'];
+    DateTime? date;
+    if (ts is Timestamp) {
+      date = ts.toDate();
+    } else if (ts is DateTime) {
+      date = ts;
+    } else if (ts is String) {
+      date = DateTime.tryParse(ts);
+    }
+    final now = DateTime.now();
+    if (date != null && date.year == now.year && date.month == now.month && date.day == now.day) {
+      return true;
+    }
+
+    // 2. Check if fromDate is today
+    final fromDateStr = data['fromDate']?.toString();
+    if (fromDateStr != null) {
+      final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      if (fromDateStr == todayStr || fromDateStr.startsWith(todayStr)) {
+        return true;
+      }
+      try {
+        final parsed = DateTime.tryParse(fromDateStr);
+        if (parsed != null && parsed.year == now.year && parsed.month == now.month && parsed.day == now.day) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,14 +220,23 @@ class _LeaveList extends StatelessWidget {
         if (!snap.hasData) return Center(
             child: CircularProgressIndicator(color: WC.terra));
 
-        final docs = snap.data!.docs;
+        var docs = snap.data!.docs;
+
+        // Apply filter in memory if showOnlyCurrentDay is true
+        if (showOnlyCurrentDay) {
+          docs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            return _isCurrentDay(data);
+          }).toList();
+        }
+
         if (docs.isEmpty) return Center(child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.event_available_rounded, size: 64,
                 color: WC.brownLight.withOpacity(0.4)),
             const SizedBox(height: 12),
-            Text("No leave requests",
+            Text(showOnlyCurrentDay ? "No leave requests today" : "No leave requests",
                 style: TextStyle(color: WC.brownLight, fontSize: 16)),
           ],
         ));

@@ -489,16 +489,26 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
             final name = type == 'student' ? (data['studentName'] ?? 'Student') : (data['teacherName'] ?? 'Teacher');
 
             Color statusColor = Colors.orange;
-            if (status == 'approved') statusColor = Colors.green;
-            if (status == 'rejected') statusColor = Colors.red;
+            Color cardBgColor = AppTheme.cardBg.withOpacity(0.85);
+            Color borderColor = AppTheme.primary.withOpacity(0.12);
+
+            if (status == 'approved') {
+              statusColor = Colors.green;
+              cardBgColor = Colors.green.withOpacity(0.08);
+              borderColor = Colors.green.withOpacity(0.3);
+            } else if (status == 'rejected') {
+              statusColor = Colors.red;
+              cardBgColor = Colors.red.withOpacity(0.08);
+              borderColor = Colors.red.withOpacity(0.3);
+            }
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppTheme.cardBg.withOpacity(0.85),
+                color: cardBgColor,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.12)),
+                border: Border.all(color: borderColor),
               ),
               child: Row(
                 children: [
