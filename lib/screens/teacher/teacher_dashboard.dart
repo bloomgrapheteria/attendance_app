@@ -17,6 +17,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   String? _displayName;
   String? _classId;
   bool _loadingName = true;
+  bool _showOnlyTodayLeaves = true;
 
   @override
   void initState() {
@@ -391,7 +392,34 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                       const SizedBox(height: 16),
 
                       // ── Leave History ─────────────────────────
-                      WarliSectionTitle(title: "LEAVE HISTORY (LAST 30 DAYS)"),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Expanded(
+                            child: WarliSectionTitle(title: "LEAVE HISTORY (LAST 30 DAYS)"),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _showOnlyTodayLeaves = !_showOnlyTodayLeaves;
+                              });
+                            },
+                            icon: Icon(
+                              _showOnlyTodayLeaves ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                              color: AppTheme.primary,
+                              size: 16,
+                            ),
+                            label: Text(
+                              _showOnlyTodayLeaves ? "Show Previous" : "Hide Previous",
+                              style: const TextStyle(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 10),
                       _buildLeaveHistory(),
 
@@ -405,6 +433,39 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         ),
       ),
     );
+  }
+
+  bool _isToday(Map<String, dynamic> data) {
+    // 1. Check if timestamp is today
+    final ts = data['timestamp'];
+    DateTime? date;
+    if (ts is Timestamp) {
+      date = ts.toDate();
+    } else if (ts is DateTime) {
+      date = ts;
+    } else if (ts is String) {
+      date = DateTime.tryParse(ts);
+    }
+    final now = DateTime.now();
+    if (date != null && date.year == now.year && date.month == now.month && date.day == now.day) {
+      return true;
+    }
+
+    // 2. Check if fromDate is today
+    final fromDateStr = data['fromDate']?.toString();
+    if (fromDateStr != null) {
+      final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      if (fromDateStr == todayStr || fromDateStr.startsWith(todayStr)) {
+        return true;
+      }
+      try {
+        final parsed = DateTime.tryParse(fromDateStr);
+        if (parsed != null && parsed.year == now.year && parsed.month == now.month && parsed.day == now.day) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   Widget _buildLeaveHistory() {
@@ -439,7 +500,12 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
           final isMyTeacherLeave = data['type'] == 'teacher' && data['teacherEmail'] == email;
           final isMyStudentLeave = data['type'] == 'student' && _classId != null && data['classId'] == _classId;
 
-          return isMyTeacherLeave || isMyStudentLeave;
+          if (!(isMyTeacherLeave || isMyStudentLeave)) return false;
+
+          if (_showOnlyTodayLeaves) {
+            return _isToday(data);
+          }
+          return true;
         }).toList();
 
         // Sort by timestamp descending
@@ -467,8 +533,10 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                 children: [
                   Icon(Icons.event_busy_rounded, color: AppTheme.primary.withOpacity(0.3), size: 36),
                   const SizedBox(height: 8),
-                  Text("No leave history for the past 30 days",
-                      style: TextStyle(color: AppTheme.textDark.withOpacity(0.5), fontSize: 13)),
+                   Text(
+                    _showOnlyTodayLeaves ? "No leave requests today" : "No leave history for the past 30 days",
+                    style: TextStyle(color: AppTheme.textDark.withOpacity(0.5), fontSize: 13),
+                  ),
                 ],
               ),
             ),

@@ -1,4 +1,10 @@
 
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:attendance_system/services/mongodb_service.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -349,6 +355,33 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
                                     title: "DAILY ATTENDANCE",
                                     badge: _displayDate(_selectedDay),
                                   ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.share_rounded, color: AppTheme.primary),
+                                  tooltip: "Share Report Image",
+                                  onPressed: () {
+                                    final totalBoys = (d['selBoysPresent'] as int) + (d['selBoysAbsent'] as int);
+                                    final totalGirls = (d['selGirlsPresent'] as int) + (d['selGirlsAbsent'] as int);
+                                    final overallPresent = (d['selBoysPresent'] as int) + (d['selGirlsPresent'] as int);
+                                    final overallTotal = totalBoys + totalGirls;
+                                    final overallPct = overallTotal > 0 ? (overallPresent / overallTotal) * 100 : 0.0;
+
+                                    final boysPresent = d['selBoysPresent'] as int;
+                                    final boysAbsent = d['selBoysAbsent'] as int;
+                                    final girlsPresent = d['selGirlsPresent'] as int;
+                                    final girlsAbsent = d['selGirlsAbsent'] as int;
+
+                                    _showReportShareDialog(
+                                      context: context,
+                                      selectedDate: _displayDate(_selectedDay),
+                                      overallPct: overallPct,
+                                      boysPresent: boysPresent,
+                                      boysAbsent: boysAbsent,
+                                      girlsPresent: girlsPresent,
+                                      girlsAbsent: girlsAbsent,
+                                      chartData: chartData,
+                                    );
+                                  },
                                 ),
                               ]),
                               const SizedBox(height: 8),
@@ -1196,4 +1229,257 @@ class _PrincipalTile extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showReportShareDialog({
+  required BuildContext context,
+  required String selectedDate,
+  required double overallPct,
+  required int boysPresent,
+  required int boysAbsent,
+  required int girlsPresent,
+  required int girlsAbsent,
+  required List<Map<String, dynamic>> chartData,
+}) {
+  final boundaryKey = GlobalKey();
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RepaintBoundary(
+                key: boundaryKey,
+                child: Container(
+                  width: 340,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7EEDC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF6E432E), width: 3),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.school_rounded, color: Color(0xFF6E432E), size: 28),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "ATTENDANCE REPORT",
+                                style: TextStyle(
+                                  color: Color(0xFF6E432E),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                              Text(
+                                selectedDate,
+                                style: const TextStyle(
+                                  color: Color(0xFF9E7153),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF9EB),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE6D6B8)),
+                        ),
+                        child: Column(
+                          children: [
+                            const Text(
+                              "OVERALL ATTENDANCE",
+                              style: TextStyle(
+                                color: Color(0xFF9E7153),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "${overallPct.toStringAsFixed(1)}%",
+                              style: const TextStyle(
+                                color: Color(0xFFD67845),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 36,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildShareStatBox(
+                              label: "Boys Section",
+                              present: boysPresent,
+                              absent: boysAbsent,
+                              color: const Color(0xFF528751),
+                              icon: Icons.male_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildShareStatBox(
+                              label: "Girls Section",
+                              present: girlsPresent,
+                              absent: girlsAbsent,
+                              color: const Color(0xFFE29A3B),
+                              icon: Icons.female_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "LAST 14 DAYS TREND",
+                        style: TextStyle(
+                          color: Color(0xFF6E432E),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 130,
+                        child: _AttendanceLineChart(data: chartData),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6E432E),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text("Cancel"),
+                  ),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD67845),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                    onPressed: () async {
+                      try {
+                        RenderRepaintBoundary boundary = boundaryKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+                        var image = await boundary.toImage(pixelRatio: 3.0);
+                        ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+                        Uint8List pngBytes = byteData!.buffer.asUint8List();
+
+                        final tempDir = await getTemporaryDirectory();
+                        final file = await File('${tempDir.path}/attendance_report.png').create();
+                        await file.writeAsBytes(pngBytes);
+
+                        await Share.shareXFiles(
+                          [XFile(file.path)],
+                          text: "Attendance Report - $selectedDate",
+                        );
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        print("Error sharing report: $e");
+                      }
+                    },
+                    icon: const Icon(Icons.share_rounded),
+                    label: const Text("Share"),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildShareStatBox({
+  required String label,
+  required int present,
+  required int absent,
+  required Color color,
+  required IconData icon,
+}) {
+  final total = present + absent;
+  final pct = total > 0 ? (present / total) * 100 : 0.0;
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFFEF9EB),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFFE6D6B8)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "${pct.toStringAsFixed(1)}%",
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "P: $present  A: $absent",
+          style: const TextStyle(
+            color: Color(0xFF9E7153),
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 }
