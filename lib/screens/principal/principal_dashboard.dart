@@ -425,20 +425,38 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
                                   title: "HISTORICAL INSIGHTS",
                                   badge: "${d['histDays']} Days"),
                               const SizedBox(height: 10),
-                              _HistoricalInsightsCard(
-                                totalPresent:      d['histPresent']      as int,
-                                totalAbsent:       d['histAbsent']       as int,
-                                total:             d['histTotal']        as int,
-                                pct:               d['histPct']          as double,
-                                daysRecorded:      d['histDays']         as int,
-                                boysPresent:       d['histBoysPresent']  as int,
-                                boysAbsent:        d['histBoysAbsent']   as int,
-                                boysPct:           d['histBoysPct']      as double,
-                                girlsPresent:      d['histGirlsPresent'] as int,
-                                girlsAbsent:       d['histGirlsAbsent']  as int,
-                                girlsPct:          d['histGirlsPct']     as double,
-                                chartData:         chartData,
-                              ),
+                              (() {
+                                final selBoysPres = d['selBoysPresent'] as int;
+                                final selBoysAbs = d['selBoysAbsent'] as int;
+                                final selGirlsPres = d['selGirlsPresent'] as int;
+                                final selGirlsAbs = d['selGirlsAbsent'] as int;
+
+                                final selPres = selBoysPres + selGirlsPres;
+                                final selAbs = selBoysAbs + selGirlsAbs;
+                                final selTot = selPres + selAbs;
+                                final selPct = selTot > 0 ? (selPres / selTot) * 100 : 0.0;
+
+                                final selBoysTot = selBoysPres + selBoysAbs;
+                                final selBoysPct = selBoysTot > 0 ? (selBoysPres / selBoysTot) * 100 : 0.0;
+
+                                final selGirlsTot = selGirlsPres + selGirlsAbs;
+                                final selGirlsPct = selGirlsTot > 0 ? (selGirlsPres / selGirlsTot) * 100 : 0.0;
+
+                                return _HistoricalInsightsCard(
+                                  totalPresent:      selPres,
+                                  totalAbsent:       selAbs,
+                                  total:             selTot,
+                                  pct:               selPct,
+                                  daysRecorded:      d['histDays']         as int,
+                                  boysPresent:       selBoysPres,
+                                  boysAbsent:        selBoysAbs,
+                                  boysPct:           selBoysPct,
+                                  girlsPresent:      selGirlsPres,
+                                  girlsAbsent:       selGirlsAbs,
+                                  girlsPct:          selGirlsPct,
+                                  chartData:         chartData,
+                                );
+                              })(),
 
                               const SizedBox(height: 20),
                             ],
@@ -988,7 +1006,7 @@ class _HistoricalInsightsCard extends StatelessWidget {
                 style: TextStyle(
                     color: isLow ? const Color(0xFFC75146) : AppTheme.primary,
                     fontWeight: FontWeight.bold, fontSize: 32)),
-            Text("overall attendance", style: TextStyle(
+            Text("daily attendance", style: TextStyle(
                 color: AppTheme.textDark.withOpacity(0.45), fontSize: 11)),
           ]),
           const Spacer(),
