@@ -64,7 +64,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
   String? selectedTeacherEmail;
   String? selectedClass;
 
-  bool isToday = false; // ← Today checkbox state
+  bool isToday = true; // ← Today checkbox state
 
   // ── Warli-inspired warm palette ──────────────────────────
   static const Color _warmBrown  = Color(0xFF6B2D0E);
@@ -389,7 +389,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                                           fontSize: 17)),
                                   SizedBox(height: 3),
                                   Text(
-                                      "Submit a leave for student or teacher",
+                                      "Submit a leave application for a student",
                                       style: TextStyle(
                                           color: Colors.white70,
                                           fontSize: 12)),
@@ -398,40 +398,6 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                         ),
 
                         const SizedBox(height: 28),
-                        _sectionLabel("LEAVE FOR"),
-
-                        // ── Leave type toggle ─────────────────
-                        Row(children: [
-                          Expanded(
-                            child: _TypeChip(
-                              label: "Student",
-                              icon: Icons.school_rounded,
-                              selected: leaveType == 'student',
-                              color: _warmBrown,
-                              onTap: () => setState(() {
-                                leaveType = 'student';
-                                selectedStudentName = null;
-                                selectedTeacherName = null;
-                              }),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _TypeChip(
-                              label: "Teacher",
-                              icon: Icons.person_rounded,
-                              selected: leaveType == 'teacher',
-                              color: _terracotta,
-                              onTap: () => setState(() {
-                                leaveType = 'teacher';
-                                selectedStudentName = null;
-                                selectedTeacherName = null;
-                              }),
-                            ),
-                          ),
-                        ]),
-
-                        const SizedBox(height: 24),
 
                         // ── Class selector dropdown ────────────
                         if (leaveType == "student") ...[
@@ -556,73 +522,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                             },
                           ),
 
-                        // ── Teacher autocomplete ──────────────
-                        if (leaveType == "teacher")
-                          StreamBuilder<QuerySnapshot>(
-                            stream: getTeachers(),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) return const SizedBox();
-                              final teachers = snapshot.data!.docs;
-                              return _card(
-                                child: Autocomplete<String>(
-                                  optionsBuilder: (text) {
-                                    if (text.text.isEmpty)
-                                      return const Iterable<String>.empty();
-                                    return teachers.map((doc) {
-                                      final data = doc.data()
-                                      as Map<String, dynamic>;
-                                      return "${data['name'] ?? 'Unknown'} (${data['email'] ?? 'NA'})";
-                                    }).where((item) => item
-                                        .toLowerCase()
-                                        .contains(
-                                        text.text.toLowerCase()));
-                                  },
-                                  onSelected: (value) {
-                                    final match = teachers.firstWhere((doc) {
-                                      final data = doc.data()
-                                      as Map<String, dynamic>;
-                                      return value
-                                          .contains(data['email'] ?? '');
-                                    });
-                                    final data = match.data()
-                                    as Map<String, dynamic>;
-                                    setState(() {
-                                      selectedTeacherName =
-                                          data['name'] ?? '';
-                                      selectedTeacherEmail =
-                                          data['email'] ?? '';
-                                    });
-                                  },
-                                  fieldViewBuilder:
-                                      (context, controller, focusNode, _) {
-                                    return TextField(
-                                      controller: controller,
-                                      focusNode: focusNode,
-                                      style: TextStyle(
-                                          color: _warmBrown.withOpacity(0.9),
-                                          fontSize: 14),
-                                      decoration: InputDecoration(
-                                        labelText:
-                                        "Search by name or email...",
-                                        prefixIcon: Icon(Icons.search_rounded,
-                                            color:
-                                            _warmBrown.withOpacity(0.4),
-                                            size: 20),
-                                        border: InputBorder.none,
-                                        labelStyle: TextStyle(
-                                            color:
-                                            _warmBrown.withOpacity(0.5),
-                                            fontSize: 13),
-                                        contentPadding:
-                                        const EdgeInsets.symmetric(
-                                            horizontal: 0, vertical: 14),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
-                          ),
+
 
                         // ── Class auto-fill chip ──────────────
                         if (leaveType == "student" &&
