@@ -140,9 +140,9 @@ class _PrincipalDashboardState extends State<PrincipalDashboard> {
       }
     }
 
-    /// ✅ Chart (last 14 days)
-    final chartData = List.generate(14, (i) {
-      final d   = DateTime.now().subtract(Duration(days: 13 - i));
+    /// ✅ Chart (last 7 days)
+    final chartData = List.generate(7, (i) {
+      final d   = DateTime.now().subtract(Duration(days: 6 - i));
       final key = _isoDate(d);
 
       final s = dateStats[key] ?? {
@@ -1047,7 +1047,7 @@ class _HistoricalInsightsCard extends StatelessWidget {
         const SizedBox(height: 14),
 
         Row(children: [
-          Text("Last 14 Days", style: TextStyle(
+          Text("Last 7 Days", style: TextStyle(
               color: AppTheme.textDark, fontWeight: FontWeight.w600, fontSize: 13)),
           const Spacer(),
           _ChartLegend(),
@@ -1370,7 +1370,7 @@ void _showReportShareDialog({
                       ),
                       const SizedBox(height: 20),
                       const Text(
-                        "LAST 14 DAYS TREND",
+                        "LAST 7 DAYS TREND",
                         style: TextStyle(
                           color: Color(0xFF6E432E),
                           fontWeight: FontWeight.bold,
