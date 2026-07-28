@@ -113,8 +113,16 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
                         prefixIcon: const Icon(Icons.school_rounded, size: 18),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
-                      items: snapshot.data!.docs.map((doc) =>
-                          DropdownMenuItem<String>(value: doc['name'], child: Text(doc['name']))).toList(),
+                      items: (() {
+                        final sortedDocs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+                        sortedDocs.sort((a, b) {
+                          final nameA = (a.data() as Map<String, dynamic>)['name']?.toString() ?? '';
+                          final nameB = (b.data() as Map<String, dynamic>)['name']?.toString() ?? '';
+                          return AppTheme.compareClassNames(nameA, nameB);
+                        });
+                        return sortedDocs.map((doc) =>
+                            DropdownMenuItem<String>(value: doc['name'], child: Text(doc['name']))).toList();
+                      })(),
                       onChanged: (value) => setDialogState(() => selectedClass = value!),
                     );
                   },
@@ -177,8 +185,12 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
                         ),
                         items: [
                           const DropdownMenuItem<String>(value: '', child: Text("No Class")),
-                          ...snapshot.data!.docs.map((doc) =>
-                              DropdownMenuItem<String>(value: doc.id, child: Text(doc.id))),
+                          ...(() {
+                            final sortedDocs = List<QueryDocumentSnapshot>.from(snapshot.data!.docs);
+                            sortedDocs.sort((a, b) => AppTheme.compareClassNames(a.id, b.id));
+                            return sortedDocs.map((doc) =>
+                                DropdownMenuItem<String>(value: doc.id, child: Text(doc.id)));
+                          })(),
                         ],
                         onChanged: (value) => setDialogState(() => selectedClass = value ?? ''),
                       );
@@ -256,11 +268,15 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
                     title: Text("No Class", style: TextStyle(color: AppTheme.textDark)),
                     onTap: () { picked = ''; Navigator.pop(context); },
                   ),
-                  ...classes.map((doc) => ListTile(
-                    leading: Icon(Icons.class_rounded, color: AppTheme.primary),
-                    title: Text(doc.id, style: TextStyle(color: AppTheme.textDark)),
-                    onTap: () { picked = doc.id; Navigator.pop(context); },
-                  )),
+                  ...(() {
+                    final sortedDocs = List<QueryDocumentSnapshot>.from(classes);
+                    sortedDocs.sort((a, b) => AppTheme.compareClassNames(a.id, b.id));
+                    return sortedDocs.map((doc) => ListTile(
+                      leading: Icon(Icons.class_rounded, color: AppTheme.primary),
+                      title: Text(doc.id, style: TextStyle(color: AppTheme.textDark)),
+                      onTap: () { picked = doc.id; Navigator.pop(context); },
+                    ));
+                  })(),
                 ]);
               },
             ),
@@ -552,6 +568,12 @@ class _ViewRecordsPageState extends State<ViewRecordsPage> {
               .toLowerCase();
           return name.contains(_query);
         }).toList();
+
+        classes.sort((a, b) {
+          final nameA = (a.data() as Map<String, dynamic>)['name']?.toString() ?? '';
+          final nameB = (b.data() as Map<String, dynamic>)['name']?.toString() ?? '';
+          return AppTheme.compareClassNames(nameA, nameB);
+        });
         if (classes.isEmpty) return Center(child: Text(
             _query.isNotEmpty ? 'No results for "$_query"' : "No classes",
             style: TextStyle(color: AppTheme.textDark.withOpacity(0.4))));

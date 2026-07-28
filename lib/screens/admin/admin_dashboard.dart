@@ -25,6 +25,50 @@ class AppTheme {
       fit: BoxFit.cover,
     ),
   );
+
+  static int? romanToDecimal(String roman) {
+    final Map<String, int> romanValues = {
+      'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6,
+      'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10, 'XI': 11, 'XII': 12
+    };
+    return romanValues[roman.toUpperCase()];
+  }
+
+  static int compareClassNames(String a, String b) {
+    final reg = RegExp(r'^([0-9a-zA-Z]+)(?:[^0-9a-zA-Z]+)?([a-zA-Z]*)$');
+    
+    final matchA = reg.firstMatch(a.trim());
+    final matchB = reg.firstMatch(b.trim());
+    
+    if (matchA == null || matchB == null) {
+      return a.compareTo(b);
+    }
+    
+    final gradeAStr = matchA.group(1) ?? '';
+    final divA = matchA.group(2) ?? '';
+    
+    final gradeBStr = matchB.group(1) ?? '';
+    final divB = matchB.group(2) ?? '';
+    
+    int getGradeValue(String gradeStr) {
+      final numVal = int.tryParse(gradeStr);
+      if (numVal != null) return numVal;
+      
+      final romanVal = romanToDecimal(gradeStr);
+      if (romanVal != null) return romanVal;
+      
+      return 999;
+    }
+    
+    final valA = getGradeValue(gradeAStr);
+    final valB = getGradeValue(gradeBStr);
+    
+    if (valA != valB) {
+      return valA.compareTo(valB);
+    }
+    
+    return divA.toLowerCase().compareTo(divB.toLowerCase());
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -763,7 +807,8 @@ class _AssignClassButton extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('classes').snapshots(),
       builder: (_, snap) {
         if (!snap.hasData) return const SizedBox();
-        final classes = snap.data!.docs;
+        final classes = List<QueryDocumentSnapshot>.from(snap.data!.docs);
+        classes.sort((a, b) => AppTheme.compareClassNames(a.id, b.id));
 
         return GestureDetector(
           onTap: () => _showClassPicker(context, classes),

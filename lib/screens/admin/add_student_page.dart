@@ -190,10 +190,14 @@ class _AddStudentPageState extends State<AddStudentPage> {
                                 const SizedBox(width: 12),
                                 Text("Select Class *", style: TextStyle(color: AppTheme.textDark.withOpacity(0.5), fontSize: 13)),
                               ]),
-                              items: snap.data!.docs.map((e) => DropdownMenuItem(
-                                value: e.id,
-                                child: Text(e.id, style: TextStyle(color: AppTheme.textDark)),
-                              )).toList(),
+                              items: (() {
+                                final sortedDocs = List<QueryDocumentSnapshot>.from(snap.data!.docs);
+                                sortedDocs.sort((a, b) => AppTheme.compareClassNames(a.id, b.id));
+                                return sortedDocs.map((e) => DropdownMenuItem(
+                                  value: e.id,
+                                  child: Text(e.id, style: TextStyle(color: AppTheme.textDark)),
+                                )).toList();
+                              })(),
                               onChanged: (v) => setState(() => selectedClass = v),
                             ),
                           ));

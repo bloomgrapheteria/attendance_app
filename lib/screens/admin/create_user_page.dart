@@ -260,13 +260,17 @@ class _CreateUserPageState extends State<CreateUserPage> {
                                               color: AppTheme.textDark
                                                   .withValues(alpha: 0.5))),
                                     ),
-                                    ...snap.data!.docs.map((e) =>
-                                        DropdownMenuItem<String>(
-                                          value: e.id,
-                                          child: Text(e.id,
-                                              style: TextStyle(
-                                                  color: AppTheme.textDark)),
-                                        )),
+                                    ...(() {
+                                      final sortedDocs = List<QueryDocumentSnapshot>.from(snap.data!.docs);
+                                      sortedDocs.sort((a, b) => AppTheme.compareClassNames(a.id, b.id));
+                                      return sortedDocs.map((e) =>
+                                          DropdownMenuItem<String>(
+                                            value: e.id,
+                                            child: Text(e.id,
+                                                style: TextStyle(
+                                                    color: AppTheme.textDark)),
+                                          ));
+                                    })(),
                                   ],
                                   onChanged: (v) =>
                                       setState(() => selectedClassId = v),
