@@ -311,8 +311,10 @@ app.post('/api/bulk/students', async (req, res) => {
         }
       } else {
         bulkOps.push({
-          insertOne: {
-            document: student
+          replaceOne: {
+            filter: { _id: resolvedId },
+            replacement: student,
+            upsert: true
           }
         });
         success++;
