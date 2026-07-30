@@ -388,6 +388,78 @@ app.post('/api/bulk/students', async (req, res) => {
   }
 });
 
+async function recalculateClassCounts(schoolId) {
+  if (!schoolId) return;
+  try {
+    const studentsColl = db.collection('students');
+    const classesColl = db.collection('classes');
+    
+    const pipeline = [
+      { $match: { schoolId } },
+      {
+        $group: {
+          _id: '$classId',
+          total: { $sum: 1 },
+          boys: {
+            $sum: {
+              $cond: [
+                { $in: ['$gender', ['male', 'boy', 'm']] },
+                1,
+                0
+              ]
+            }
+          },
+          girls: {
+            $sum: {
+              $cond: [
+                { $in: ['$gender', ['female', 'girl', 'f']] },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ];
+
+    const counts = await studentsColl.aggregate(pipeline).toArray();
+    const allClasses = await classesColl.find({ schoolId }).toArray();
+    
+    const countsMap = new Map();
+    for (const c of counts) {
+      if (c._id) {
+        countsMap.set(c._id, c);
+      }
+    }
+
+    const classCountUpdates = [];
+    for (const cls of allClasses) {
+      const cleanName = cls._id.includes('_') ? cls._id.split('_').pop() : cls._id;
+      const countData = countsMap.get(cleanName) || { total: 0, boys: 0, girls: 0 };
+      
+      classCountUpdates.push({
+        updateOne: {
+          filter: { _id: cls._id },
+          update: {
+            $set: {
+              totalStudents: countData.total,
+              boys: countData.boys,
+              girls: countData.girls,
+              updatedAt: new Date()
+            }
+          }
+        }
+      });
+    }
+
+    if (classCountUpdates.length) {
+      await classesColl.bulkWrite(classCountUpdates);
+    }
+  } catch (err) {
+    console.error('Error recalculating class counts:', err);
+  }
+}
+
 // --- GENERIC REST CRUD APIs ---
 app.get('/api/documents/:collection', async (req, res) => {
   const { collection } = req.params;
@@ -444,6 +516,13 @@ app.post('/api/documents/:collection/:id', async (req, res) => {
     
     await coll.replaceOne({ _id: id }, data, { upsert: true });
     res.json({ success: true });
+
+    if (collection === 'students') {
+      const schoolId = data.schoolId || (id.includes('_') ? id.split('_')[0] : null);
+      if (schoolId) {
+        setTimeout(() => recalculateClassCounts(schoolId), 100);
+      }
+    }
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -471,6 +550,14 @@ app.put('/api/documents/:collection/:id', async (req, res) => {
     }
     await coll.updateOne({ _id: id }, finalUpdate);
     res.json({ success: true });
+
+    if (collection === 'students') {
+      const existing = await coll.findOne({ _id: id });
+      const schoolId = existing ? existing.schoolId : null;
+      if (schoolId) {
+        setTimeout(() => recalculateClassCounts(schoolId), 100);
+      }
+    }
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -480,8 +567,19 @@ app.delete('/api/documents/:collection/:id', async (req, res) => {
   const { collection, id } = req.params;
   try {
     const coll = db.collection(collection);
+    
+    let schoolId = null;
+    if (collection === 'students') {
+      const existing = await coll.findOne({ _id: id });
+      if (existing) schoolId = existing.schoolId;
+    }
+
     await coll.deleteOne({ _id: id });
     res.json({ success: true });
+
+    if (schoolId) {
+      setTimeout(() => recalculateClassCounts(schoolId), 100);
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
