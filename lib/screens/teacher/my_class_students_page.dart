@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:attendance_system/services/mongodb_service.dart';
+import '../admin/admin_dashboard.dart';
 
 class MyClassStudentsPage extends StatefulWidget {
   final String classId;
@@ -32,7 +33,7 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
               WarliAppBar(
                 title: "Class $cleanClassId Students",
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textDark),
+                  icon: Icon(Icons.arrow_back_rounded, color: AppTheme.textDark),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
@@ -50,7 +51,7 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                         ),
                         child: TextField(
                           controller: _searchCtrl,
-                          style: const TextStyle(color: AppTheme.textDark, fontSize: 14),
+                          style: TextStyle(color: AppTheme.textDark, fontSize: 14),
                           onChanged: (val) {
                             setState(() {
                               _searchQuery = val.trim().toLowerCase();
@@ -140,7 +141,7 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                                       backgroundColor: AppTheme.primary.withOpacity(0.1),
                                       child: Text(
                                         name.isNotEmpty ? name[0].toUpperCase() : '?',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: AppTheme.primary,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -148,7 +149,7 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                                     ),
                                     title: Text(
                                       name,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: AppTheme.textDark,
                                       ),
