@@ -19,12 +19,14 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final _nameCtrl  = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController(); // ← auto-filled on selection
+  final _newPassCtrl = TextEditingController();
 
   // ── State ────────────────────────────────────────────────────────────────────
   bool _searching = false;
   bool _loading   = false;
 
   Map<String, dynamic>? _selectedUser; // set when user picks from list
+  String? _selectedUserUid;
   List<QueryDocumentSnapshot> _suggestions = [];
   bool _showSuggestions = false;
 
@@ -36,6 +38,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _newPassCtrl.dispose();
     super.dispose();
   }
 
@@ -99,6 +102,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     final data = doc.data() as Map<String, dynamic>;
     setState(() {
       _selectedUser    = data;
+      _selectedUserUid = doc.id;
       _showSuggestions = false;
       _suggestions     = [];
 
@@ -154,16 +158,20 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
     );
   }
 
-  // ── Send reset email ──────────────────────────────────────────────────────────
-  Future<void> _sendReset() async {
-    if (_selectedUser == null) {
+  // ── Reset Password ──────────────────────────────────────────────────────────
+  Future<void> _resetPassword() async {
+    if (_selectedUser == null || _selectedUserUid == null) {
       _snack("Please search and select a user first");
       return;
     }
 
-    final email = _emailCtrl.text.trim();
-    if (email.isEmpty) {
-      _snack("No email address found for this user");
+    final newPass = _newPassCtrl.text.trim();
+    if (newPass.isEmpty) {
+      _snack("Please enter a new password");
+      return;
+    }
+    if (newPass.length < 6) {
+      _snack("Password must be at least 6 characters");
       return;
     }
 
@@ -185,16 +193,23 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
             email: adminUser.email!, password: adminPassword),
       );
 
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      // Update password directly in database (backend will hash it)
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_selectedUserUid)
+          .update({'password': newPass});
+
       if (!mounted) return;
-      _snack("Reset link sent to $email ✓");
+      _snack("Password reset successfully ✓");
 
       // Clear everything after success
       _nameCtrl.clear();
       _phoneCtrl.clear();
       _emailCtrl.clear();
+      _newPassCtrl.clear();
       setState(() {
         _selectedUser    = null;
+        _selectedUserUid = null;
         _suggestions     = [];
         _showSuggestions = false;
       });
@@ -247,7 +262,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                         const WarliBanner(
                           icon:     Icons.lock_reset_rounded,
                           title:    "Password Reset",
-                          subtitle: "Search a user and send them a reset link",
+                          subtitle: "Search a user and enter a new password",
                         ),
                         const SizedBox(height: 24),
 
@@ -331,6 +346,21 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                           hasUser:    _selectedUser != null,
                         ),
 
+                        const SizedBox(height: 14),
+
+                        // ── New Password field ──────────────────────────────────
+                        const WarliSectionTitle(title: "NEW PASSWORD"),
+                        const SizedBox(height: 8),
+                        _SearchField(
+                          controller: _newPassCtrl,
+                          label:      "Enter new password (min. 6 chars)…",
+                          icon:       Icons.lock_rounded,
+                          keyboard:   TextInputType.visiblePassword,
+                          obscureText: true,
+                          readOnly:   _selectedUser == null,
+                          isSelected: false,
+                        ),
+
                         // ── Searching spinner ──────────────────────────────────
                         if (_searching)
                           Padding(
@@ -370,7 +400,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
                               const SizedBox(width: 9),
                               Expanded(
                                 child: Text(
-                                  "Admin will be asked to verify their password before the reset link is sent.",
+                                  "Admin will be asked to verify their credentials to save the new password.",
                                   style: TextStyle(
                                       color: AppTheme.textDark.withValues(alpha: 0.65),
                                       fontSize: 12,
@@ -383,9 +413,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
 
                         const SizedBox(height: 16),
                         WarliButton(
-                          label:     "Send Reset Link",
+                          label:     "Reset Password",
                           loading:   _loading,
-                          onPressed: _sendReset,
+                          onPressed: _resetPassword,
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -467,6 +497,7 @@ class _SearchField extends StatelessWidget {
   final TextInputType keyboard;
   final bool readOnly;
   final bool isSelected;     // true after a user has been picked
+  final bool obscureText;
   final ValueChanged<String>? onChanged;
 
   const _SearchField({
@@ -476,6 +507,7 @@ class _SearchField extends StatelessWidget {
     required this.keyboard,
     required this.readOnly,
     required this.isSelected,
+    this.obscureText = false,
     this.onChanged,
   });
 
@@ -505,6 +537,7 @@ class _SearchField extends StatelessWidget {
         controller: controller,
         keyboardType: keyboard,
         readOnly: readOnly,
+        obscureText: obscureText,
         onChanged: onChanged,
         style: TextStyle(
             color: AppTheme.textDark.withValues(alpha: readOnly ? 0.3 : 1.0),
