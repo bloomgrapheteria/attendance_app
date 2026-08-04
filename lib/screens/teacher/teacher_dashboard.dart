@@ -114,8 +114,22 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
       body: Container(
         decoration: AppTheme.bgDecoration,
         child: SafeArea(
-          child: Column(
-            children: [
+          child: StreamBuilder<DocumentSnapshot>(
+            stream: currentUser != null
+                ? FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots()
+                : null,
+            builder: (context, userSnapshot) {
+              if (userSnapshot.hasData && userSnapshot.data != null) {
+                final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
+                if (userData != null) {
+                  _displayName = userData['name'] as String?;
+                  _classId = userData['classId'] as String?;
+                  _loadingName = false;
+                }
+              }
+
+              return Column(
+                children: [
               // ── AppBar ────────────────────────────────────────
               WarliAppBar(
                 title: "Teacher Dashboard",
@@ -326,6 +340,16 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                       ),
                       const SizedBox(height: 12),
 
+                      if (_classId != null && _classId!.isNotEmpty) ...[
+                        _DashTile(
+                          icon: Icons.people_alt_rounded,
+                          title: "My Class Students",
+                          subtitle: "View list of students in Class ${_classId!.contains('_') ? _classId!.split('_').last : _classId}",
+                          onTap: () => _showMyClassStudentsSheet(context),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       // ── Standing Principal dynamic option ──
                       StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
@@ -429,11 +453,13 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                 ),
               ),
             ],
-          ),
-        ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   bool _isToday(Map<String, dynamic> data) {
     // 1. Check if timestamp is today
@@ -648,6 +674,155 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  void _showMyClassStudentsSheet(BuildContext context) {
+    if (_classId == null || _classId!.isEmpty) return;
+    final cleanClassId = _classId!.contains('_') ? _classId!.split('_').last : _classId;
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.school_rounded, color: AppTheme.primary, size: 22),
+                    const SizedBox(width: 10),
+                    Text(
+                      "Class $cleanClassId Students",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textDark,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('students')
+                      .where('classId', isEqualTo: cleanClassId)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    
+                    final docs = snapshot.data!.docs;
+                    
+                    // Sort students by name
+                    final List<QueryDocumentSnapshot> students = List.from(docs);
+                    students.sort((a, b) {
+                      final nameA = (a.data() as Map<String, dynamic>)['name']?.toString().toLowerCase() ?? '';
+                      final nameB = (b.data() as Map<String, dynamic>)['name']?.toString().toLowerCase() ?? '';
+                      return nameA.compareTo(nameB);
+                    });
+
+                    if (students.isEmpty) {
+                      return Center(
+                        child: Text(
+                          "No students found in this class",
+                          style: TextStyle(color: AppTheme.textDark.withOpacity(0.4)),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      itemCount: students.length,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      itemBuilder: (context, idx) {
+                        final data = students[idx].data() as Map<String, dynamic>;
+                        final name = data['name'] ?? 'Unknown';
+                        final gr = data['grNumber']?.toString() ?? 'NA';
+                        final roll = data['rollNo']?.toString() ?? '—';
+                        final gender = data['gender']?.toString() ?? '—';
+                        final phone = data['phone']?.toString() ?? '—';
+
+                        return Card(
+                          color: AppTheme.cardBg,
+                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(color: AppTheme.primary.withOpacity(0.12)),
+                          ),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: AppTheme.primary.withOpacity(0.1),
+                              child: Text(
+                                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                style: const TextStyle(
+                                  color: AppTheme.primary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textDark,
+                              ),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text("Roll: $roll", style: const TextStyle(fontSize: 12)),
+                                    const SizedBox(width: 12),
+                                    Text("GR: $gr", style: const TextStyle(fontSize: 12)),
+                                    const Spacer(),
+                                    Text(
+                                      gender.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: gender.toLowerCase() == 'male' || gender.toLowerCase() == 'boy'
+                                            ? Colors.blue.shade700
+                                            : Colors.pink.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (phone != '—' && phone.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text("Parent Contact: $phone", style: const TextStyle(fontSize: 12)),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
