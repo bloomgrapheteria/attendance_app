@@ -32,10 +32,6 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
             children: [
               WarliAppBar(
                 title: "Class $cleanClassId Students",
-                leading: IconButton(
-                  icon: Icon(Icons.arrow_back_rounded, color: AppTheme.textDark),
-                  onPressed: () => Navigator.pop(context),
-                ),
               ),
               Expanded(
                 child: Padding(

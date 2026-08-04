@@ -3,7 +3,6 @@ import 'package:attendance_system/services/mongodb_service.dart';
 import 'create_user_page.dart';
 import '/services/auth_service.dart';
 import '/login_page.dart';
-import 'add_class_page.dart';
 import 'add_student_page.dart';
 import 'reset_password_page.dart';
 import 'view_records_page.dart';

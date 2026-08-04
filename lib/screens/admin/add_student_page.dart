@@ -73,7 +73,7 @@ class _AddStudentPageState extends State<AddStudentPage> {
           if (check.exists) { _snack("New GR exists"); return; }
           final oldDoc = await FirebaseFirestore.instance.collection('students').doc(existingGr).get();
           final oldData = oldDoc.data();
-          if (oldData != null) await FirebaseFirestore.instance.collection('students').doc(newGr).set({...oldData, 'grNumber': newGr});
+          await FirebaseFirestore.instance.collection('students').doc(newGr).set({...oldData, 'grNumber': newGr});
           await FirebaseFirestore.instance.collection('students').doc(existingGr).set({
             'name': _nameController.text.trim(), 'phone': _phoneController.text.trim(),
             'address': _addressController.text.trim(),

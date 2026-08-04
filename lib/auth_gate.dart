@@ -28,7 +28,7 @@ class AuthGate extends StatelessWidget {
         return FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance
               .collection('users')
-              .doc(user!.uid)
+              .doc(user.uid)
               .get(),
           builder: (context, snap) {
 
@@ -54,7 +54,7 @@ class AuthGate extends StatelessWidget {
               );
             }
             print("UID: ${user.uid}");
-            final data = snap.data!.data() as Map<String, dynamic>;
+            final data = snap.data!.data();
             final role = data['role'];
 
             if (role == 'admin') return const AdminDashboard();
