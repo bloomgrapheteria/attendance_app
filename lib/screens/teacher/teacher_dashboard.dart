@@ -109,6 +109,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   @override
   Widget build(BuildContext context) {
     final AuthService authService = AuthService();
+    final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       body: Container(
