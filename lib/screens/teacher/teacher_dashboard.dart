@@ -325,35 +325,42 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
                       WarliSectionTitle(title: "QUICK ACTIONS"),
                       const SizedBox(height: 10),
 
-                      _DashTile(
-                        icon: Icons.how_to_reg_rounded,
-                        title: "Mark Attendance",
-                        subtitle: "Record attendance for your class today",
-                        onTap: () => Navigator.push(
-                            context, MaterialPageRoute(builder: (_) => const MarkAttendancePage())),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _ActionCard(
+                              icon: Icons.how_to_reg_rounded,
+                              title: "Mark\nAttendance",
+                              onTap: () => Navigator.push(
+                                  context, MaterialPageRoute(builder: (_) => const MarkAttendancePage())),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _ActionCard(
+                              icon: Icons.event_note_rounded,
+                              title: "Create Leave\nApplication",
+                              onTap: () => Navigator.push(
+                                  context, MaterialPageRoute(builder: (_) => const CreateLeavePage())),
+                            ),
+                          ),
+                          if (_classId != null && _classId!.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _ActionCard(
+                                icon: Icons.people_alt_rounded,
+                                title: "My Class\nStudents",
+                                onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => MyClassStudentsPage(classId: _classId!))),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      _DashTile(
-                        icon: Icons.event_note_rounded,
-                        title: "Create Leave Application",
-                        subtitle: "Submit a leave request for student or teacher",
-                        onTap: () => Navigator.push(
-                            context, MaterialPageRoute(builder: (_) => const CreateLeavePage())),
-                      ),
-                      const SizedBox(height: 12),
-
-                      if (_classId != null && _classId!.isNotEmpty) ...[
-                        _DashTile(
-                          icon: Icons.people_alt_rounded,
-                          title: "My Class Students",
-                          subtitle: "View list of students in Class ${_classId!.contains('_') ? _classId!.split('_').last : _classId}",
-                          onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) => MyClassStudentsPage(classId: _classId!))),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+                      const SizedBox(height: 16),
 
                       // ── Standing Principal dynamic option ──
                       StreamBuilder<QuerySnapshot>(
@@ -726,6 +733,56 @@ class _DashTile extends StatelessWidget {
           ),
           Icon(Icons.chevron_right_rounded, color: AppTheme.primary.withOpacity(0.4), size: 20),
         ]),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  Grid / Column Action Card
+// ─────────────────────────────────────────────
+class _ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  const _ActionCard({required this.icon, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.cardBg.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.primary.withOpacity(0.18)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppTheme.primary, size: 22),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: AppTheme.textDark,
+                height: 1.2,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
