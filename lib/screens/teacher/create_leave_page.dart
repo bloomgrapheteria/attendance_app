@@ -159,7 +159,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
 
     if (finalReason.isEmpty ||
         fromDateController.text.isEmpty ||
-        toDateController.text.isEmpty) {
+        (!isToday && toDateController.text.isEmpty)) {
       _snack("Fill all fields");
       return;
     }
@@ -193,7 +193,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
         'fromDate'    : isToday ? today : fromDateController.text,
         'toDate'      : isToday ? today : toDateController.text,
         'fromTime'    : isToday ? fromDateController.text : null,
-        'toTime'      : isToday ? toDateController.text   : null,
+        'toTime'      : null,
         'status'      : 'pending',
         'timestamp'   : FieldValue.serverTimestamp(),
       });
@@ -211,7 +211,7 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
         'fromDate'     : isToday ? today : fromDateController.text,
         'toDate'       : isToday ? today : toDateController.text,
         'fromTime'     : isToday ? fromDateController.text : null,
-        'toTime'       : isToday ? toDateController.text   : null,
+        'toTime'       : null,
         'status'       : 'pending',
         'timestamp'    : FieldValue.serverTimestamp(),
       });
@@ -656,35 +656,37 @@ class _CreateLeavePageState extends State<CreateLeavePage> {
                         const SizedBox(height: 12),
 
                         // ── Date OR Time pickers ──────────────
-                        Row(children: [
-                          Expanded(
-                            child: _textField(
-                              controller: fromDateController,
-                              label: isToday ? "From Time" : "From Date",
-                              icon: isToday
-                                  ? Icons.access_time_rounded
-                                  : Icons.calendar_today_rounded,
-                              readOnly: true,
-                              onTap: isToday
-                                  ? () => pickTime(fromDateController)
-                                  : () => pickDate(fromDateController),
-                            ),
+                        if (isToday) ...[
+                          _textField(
+                            controller: fromDateController,
+                            label: "Leaving Time",
+                            icon: Icons.access_time_rounded,
+                            readOnly: true,
+                            onTap: () => pickTime(fromDateController),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _textField(
-                              controller: toDateController,
-                              label: isToday ? "To Time" : "To Date",
-                              icon: isToday
-                                  ? Icons.access_time_rounded
-                                  : Icons.calendar_today_rounded,
-                              readOnly: true,
-                              onTap: isToday
-                                  ? () => pickTime(toDateController)
-                                  : pickToDate,
+                        ] else ...[
+                          Row(children: [
+                            Expanded(
+                              child: _textField(
+                                controller: fromDateController,
+                                label: "From Date",
+                                icon: Icons.calendar_today_rounded,
+                                readOnly: true,
+                                onTap: () => pickDate(fromDateController),
+                              ),
                             ),
-                          ),
-                        ]),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _textField(
+                                controller: toDateController,
+                                label: "To Date",
+                                icon: Icons.calendar_today_rounded,
+                                readOnly: true,
+                                onTap: pickToDate,
+                              ),
+                            ),
+                          ]),
+                        ],
 
                         const SizedBox(height: 32),
 

@@ -1341,6 +1341,29 @@ void _showReportShareDialog({
                                 fontSize: 36,
                               ),
                             ),
+                            const SizedBox(height: 12),
+                            const Divider(height: 1, color: Color(0xFFE6D6B8)),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _buildSummaryItem(
+                                  label: "TOTAL",
+                                  value: "${boysPresent + boysAbsent + girlsPresent + girlsAbsent}",
+                                  color: const Color(0xFF6E432E),
+                                ),
+                                _buildSummaryItem(
+                                  label: "PRESENT",
+                                  value: "${boysPresent + girlsPresent}",
+                                  color: const Color(0xFF528751),
+                                ),
+                                _buildSummaryItem(
+                                  label: "ABSENT",
+                                  value: "${boysAbsent + girlsAbsent}",
+                                  color: const Color(0xFFC75146),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -1499,5 +1522,31 @@ Widget _buildShareStatBox({
         ),
       ],
     ),
+  );
+}
+
+Widget _buildSummaryItem({required String label, required String value, required Color color}) {
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          color: color.withOpacity(0.75),
+          fontWeight: FontWeight.bold,
+          fontSize: 9,
+          letterSpacing: 0.5,
+        ),
+      ),
+      const SizedBox(height: 3),
+      Text(
+        value,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 16,
+        ),
+      ),
+    ],
   );
 }

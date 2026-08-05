@@ -135,17 +135,55 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
               // ── AppBar ────────────────────────────────────────
               WarliAppBar(
                 title: "Teacher Dashboard",
-                trailing: IconButton(
-                  icon: const Icon(Icons.logout_rounded, color: AppTheme.textDark, size: 22),
-                  onPressed: () async {
-                    await authService.logout();
-                    if (!context.mounted) return;
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                          (r) => false,
-                    );
-                  },
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    StreamBuilder<QuerySnapshot>(
+                      stream: currentUser != null
+                          ? FirebaseFirestore.instance
+                              .collection('notifications')
+                              .where('teacherEmail', isEqualTo: currentUser.email)
+                              .where('isRead', isEqualTo: false)
+                              .snapshots()
+                          : null,
+                      builder: (context, unreadSnap) {
+                        final hasUnread = unreadSnap.hasData && unreadSnap.data!.docs.isNotEmpty;
+                        return Stack(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.notifications_rounded, color: AppTheme.textDark, size: 22),
+                              onPressed: () => _showNotificationsSheet(context),
+                            ),
+                            if (hasUnread)
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: Container(
+                                  width: 9,
+                                  height: 9,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.logout_rounded, color: AppTheme.textDark, size: 22),
+                      onPressed: () async {
+                        await authService.logout();
+                        if (!context.mounted) return;
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                              (r) => false,
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
 
@@ -691,6 +729,152 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     );
   }
 
+  void _showNotificationsSheet(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36, height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.notifications_active_rounded, color: AppTheme.primary, size: 22),
+                        const SizedBox(width: 10),
+                        const Text(
+                          "Notifications",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textDark,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        final snap = await FirebaseFirestore.instance
+                            .collection('notifications')
+                            .where('teacherEmail', isEqualTo: user.email)
+                            .get();
+                        for (var doc in snap.docs) {
+                          await doc.reference.update({'isRead': true});
+                        }
+                      },
+                      child: const Text("Mark all read", style: TextStyle(fontSize: 12, color: AppTheme.primary)),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notifications')
+                      .where('teacherEmail', isEqualTo: user.email)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = List.from(snapshot.data!.docs);
+                    docs.sort((a, b) {
+                      final aTs = (a.data() as Map)['timestamp'] as Timestamp?;
+                      final bTs = (b.data() as Map)['timestamp'] as Timestamp?;
+                      if (aTs == null && bTs == null) return 0;
+                      if (aTs == null) return 1;
+                      if (bTs == null) return -1;
+                      return bTs.compareTo(aTs);
+                    });
+
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Text(
+                          "No notifications yet",
+                          style: TextStyle(color: AppTheme.textDark.withOpacity(0.4)),
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: docs.length,
+                      itemBuilder: (context, idx) {
+                        final doc = docs[idx];
+                        final data = doc.data() as Map<String, dynamic>;
+                        final title = data['title'] ?? 'Notification';
+                        final body = data['body'] ?? '';
+                        final isRead = data['isRead'] == true;
+                        
+                        return Card(
+                          color: isRead ? AppTheme.cardBg : AppTheme.primary.withOpacity(0.08),
+                          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: isRead ? AppTheme.primary.withOpacity(0.1) : AppTheme.primary.withOpacity(0.3),
+                              width: isRead ? 1 : 1.5,
+                            ),
+                          ),
+                          child: ListTile(
+                            leading: Icon(
+                              Icons.notifications_rounded,
+                              color: isRead ? AppTheme.textDark.withOpacity(0.5) : AppTheme.primary,
+                            ),
+                            title: Text(
+                              title,
+                              style: TextStyle(
+                                fontWeight: isRead ? FontWeight.normal : FontWeight.bold,
+                                color: AppTheme.textDark,
+                              ),
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4.0),
+                              child: Text(
+                                body,
+                                style: TextStyle(
+                                  color: AppTheme.textDark.withOpacity(0.7),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            trailing: !isRead
+                                ? IconButton(
+                                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppTheme.primary),
+                                    onPressed: () => doc.reference.update({'isRead': true}),
+                                  )
+                                : null,
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
 }
 

@@ -72,6 +72,73 @@ class _WatchmanDashboardState extends State<WatchmanDashboard> {
     }
   }
 
+  Future<void> _markAsReturned(BuildContext ctx, String docId, String id, Map<String, dynamic> data) async {
+    setState(() => _markingInProgress.add(docId));
+    try {
+      final returnTime = DateTime.now();
+      await FirebaseFirestore.instance.collection('leave_requests').doc(docId).update({
+        'status': 'returned',
+        'returnTime': Timestamp.fromDate(returnTime),
+      });
+
+      final isStudent = (data['type'] ?? 'student') == 'student';
+      if (isStudent) {
+        final classId = data['classId']?.toString();
+        final studentName = data['studentName'] ?? 'Unknown';
+        final grNumber = data['grNumber'] ?? '—';
+        if (classId != null && classId.isNotEmpty) {
+          final cleanClassId = classId.contains('_') ? classId.split('_').last : classId;
+          
+          final teacherQuery = await FirebaseFirestore.instance
+              .collection('users')
+              .where('role', isEqualTo: 'teacher')
+              .where('classId', isEqualTo: cleanClassId)
+              .limit(1)
+              .get();
+          
+          if (teacherQuery.docs.isNotEmpty) {
+            final teacherEmail = teacherQuery.docs.first.data()['email'];
+            if (teacherEmail != null) {
+              await FirebaseFirestore.instance.collection('notifications').add({
+                'teacherEmail': teacherEmail,
+                'title': 'Student Returned',
+                'body': 'Student $studentName (GR: $grNumber) of Class $cleanClassId has returned to campus.',
+                'timestamp': FieldValue.serverTimestamp(),
+                'isRead': false,
+              });
+            }
+          }
+        }
+      }
+
+      setState(() { _markingInProgress.remove(docId); });
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text("Return recorded at ${_formatTime(returnTime)}", style: const TextStyle(color: Colors.white)),
+          ]),
+          backgroundColor: AppTheme.textDark,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
+        ));
+      }
+    } catch (e) {
+      setState(() => _markingInProgress.remove(docId));
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+          content: Text("Error: ${e.toString()}"),
+          backgroundColor: _red,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+        ));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final AuthService authService = AuthService();
@@ -221,6 +288,7 @@ class _WatchmanDashboardState extends State<WatchmanDashboard> {
                               isNew: isNew, isMarking: isMarking,
                               onSeen: () => setState(() => _seenIds.add(id)),
                               onMarkAsLeft: () => _markAsLeft(ctx, doc.id, id),
+                              onMarkAsReturned: () => _markAsReturned(ctx, doc.id, id, data),
                               formatTs: _formatTimestamp,
                             );
                           },
@@ -269,12 +337,12 @@ class _LeaveCard extends StatelessWidget {
   final String docId;
   final Map<String, dynamic> data;
   final bool isNew, isMarking;
-  final VoidCallback onSeen, onMarkAsLeft;
+  final VoidCallback onSeen, onMarkAsLeft, onMarkAsReturned;
   final String Function(Timestamp) formatTs;
   const _LeaveCard({
     required this.docId, required this.data,
     required this.isNew, required this.isMarking,
-    required this.onSeen, required this.onMarkAsLeft,
+    required this.onSeen, required this.onMarkAsLeft, required this.onMarkAsReturned,
     required this.formatTs,
   });
 
@@ -433,6 +501,32 @@ class _LeaveCard extends StatelessWidget {
                       style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isMarking ? AppTheme.primary.withOpacity(0.5) : AppTheme.textDark,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppTheme.primary.withOpacity(0.4),
+                    disabledForegroundColor: Colors.white70,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 11),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+
+            // ── Mark as returned button ───────────────────────
+            if (isExited && isStudent) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: isMarking ? null : onMarkAsReturned,
+                  icon: isMarking
+                      ? const SizedBox(width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.assignment_turned_in_rounded, size: 16),
+                  label: Text(isMarking ? "Recording Return..." : "Mark as Returned",
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isMarking ? AppTheme.primary.withOpacity(0.5) : Colors.green.shade700,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: AppTheme.primary.withOpacity(0.4),
                     disabledForegroundColor: Colors.white70,
