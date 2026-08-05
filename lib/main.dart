@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:attendance_system/services/mongodb_service.dart';
+import 'package:attendance_system/services/notification_service.dart';
 import 'auth_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await MongoDBService.init();
+  await NotificationService().init();
 
   runApp(const MyApp());
 }

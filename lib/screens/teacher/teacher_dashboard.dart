@@ -7,6 +7,8 @@ import '/login_page.dart';
 import 'my_class_students_page.dart';
 import '/services/auth_service.dart';
 import '../admin/admin_dashboard.dart'; // ← shared AppTheme + WarliAppBar + WarliButton + WarliField
+import 'package:attendance_system/services/notification_service.dart';
+import 'dart:async';
 
 class TeacherDashboard extends StatefulWidget {
   const TeacherDashboard({super.key});
@@ -20,10 +22,47 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
   bool _loadingName = true;
   bool _showOnlyTodayLeaves = true;
 
+  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+
   @override
   void initState() {
     super.initState();
     _loadName();
+    _initNotificationListener();
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _initNotificationListener() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.email == null) return;
+
+    final startTime = DateTime.now();
+
+    _notificationSubscription = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('teacherEmail', isEqualTo: user.email)
+        .where('isRead', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data() as Map<String, dynamic>?;
+          if (data != null) {
+            final timestamp = data['timestamp'] as Timestamp?;
+            if (timestamp != null && timestamp.toDate().isAfter(startTime)) {
+              final title = data['title'] ?? 'Notification';
+              final body = data['body'] ?? '';
+              NotificationService().showNotification(title, body);
+            }
+          }
+        }
+      }
+    });
   }
 
   Future<void> _loadName() async {
