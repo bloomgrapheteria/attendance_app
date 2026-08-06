@@ -90,6 +90,169 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
 
   bool _showOnlyCurrentDay = true;
 
+  void _showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String tempClass = _selectedClass;
+        String tempStatus = _selectedStatus;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: WC.cardBg,
+              title: const Text(
+                "Filter Applications",
+                style: TextStyle(color: WC.brown, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              content: SizedBox(
+                width: 320,
+                height: 280,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Class Column (Left)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("BY CLASS", style: TextStyle(color: WC.brownLight, fontSize: 11, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: _classOptions.length,
+                              itemBuilder: (context, index) {
+                                final c = _classOptions[index];
+                                final isSel = tempClass == c;
+                                return InkWell(
+                                  onTap: () {
+                                    setDialogState(() => tempClass = c);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSel ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                          size: 16,
+                                          color: isSel ? WC.terra : WC.brownLight,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(c, style: TextStyle(color: WC.brown, fontSize: 12, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const VerticalDivider(width: 16, color: WC.divider),
+                    // Status Column (Right)
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("BY STATUS", style: TextStyle(color: WC.brownLight, fontSize: 11, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 6),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: 7,
+                              itemBuilder: (context, index) {
+                                final list = ['All', 'Pending', 'Approved', 'Rejected', 'Arrived', 'Exit Complete', 'Completed'];
+                                final s = list[index];
+                                final isSel = tempStatus == s;
+                                return InkWell(
+                                  onTap: () {
+                                    setDialogState(() => tempStatus = s);
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSel ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                                          size: 16,
+                                          color: isSel ? WC.terra : WC.brownLight,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(s, style: TextStyle(color: WC.brown, fontSize: 12, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedClass = 'All';
+                      _selectedStatus = 'All';
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Reset", style: TextStyle(color: WC.brownLight)),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedClass = tempClass;
+                      _selectedStatus = tempStatus;
+                    });
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Apply", style: TextStyle(color: WC.brown, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _pickFilterDate() async {
+    if (_selectedDate != null) {
+      setState(() => _selectedDate = null);
+      return;
+    }
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: WC.brown,
+              onPrimary: Colors.white,
+              onSurface: WC.brown,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -119,185 +282,132 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
               ]),
             ),
 
-            // Search Panel
+            // Search and Filters Panel (Beside All/Show Prev Row)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: TextField(
-                onChanged: (val) => setState(() => _searchQuery = val),
-                style: const TextStyle(color: WC.brown, fontSize: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search by student name or class...',
-                  hintStyle: TextStyle(color: WC.brownLight.withOpacity(0.6), fontSize: 13),
-                  prefixIcon: const Icon(Icons.search_rounded, color: WC.brown, size: 20),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.55),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: const BorderSide(color: WC.brown, width: 1.5),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-              ),
-            ),
-
-            // Filters Panel
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  // Class Dropdown
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: WC.brown.withOpacity(0.15)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedClass,
-                          dropdownColor: WC.cardBg,
-                          style: const TextStyle(color: WC.brown, fontSize: 12, fontWeight: FontWeight.bold),
-                          isExpanded: true,
-                          items: _classOptions.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                          onChanged: (val) => setState(() => _selectedClass = val ?? 'All'),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Status Dropdown
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: WC.brown.withOpacity(0.15)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: _selectedStatus,
-                          dropdownColor: WC.cardBg,
-                          style: const TextStyle(color: WC.brown, fontSize: 12, fontWeight: FontWeight.bold),
-                          isExpanded: true,
-                          items: ['All', 'Pending', 'Approved', 'Rejected', 'Arrived', 'Exit Complete', 'Completed']
-                              .map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                          onChanged: (val) => setState(() => _selectedStatus = val ?? 'All'),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Date Picker Button
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _selectedDate ?? DateTime.now(),
-                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                        builder: (context, child) {
-                          return Theme(
-                            data: Theme.of(context).copyWith(
-                              colorScheme: const ColorScheme.light(
-                                primary: WC.brown,
-                                onPrimary: Colors.white,
-                                onSurface: WC.brown,
-                              ),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      style: const TextStyle(color: WC.brown, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Search student...',
+                        hintStyle: TextStyle(color: WC.brownLight.withOpacity(0.6), fontSize: 12),
+                        prefixIcon: const Icon(Icons.search_rounded, color: WC.brown, size: 18),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Filter Icon
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.filter_alt_rounded,
+                                    size: 18,
+                                    color: (_selectedClass != 'All' || _selectedStatus != 'All')
+                                        ? WC.terra
+                                        : WC.brown,
+                                  ),
+                                  onPressed: _showFilterDialog,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                if (_selectedClass != 'All' || _selectedStatus != 'All')
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: WC.terra,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                            child: child!,
-                          );
-                        },
-                      );
-                      if (picked != null) {
-                        setState(() => _selectedDate = picked);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _selectedDate != null ? WC.brown : Colors.white.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: WC.brown.withOpacity(0.15)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.calendar_month_rounded, 
-                            size: 16, 
-                            color: _selectedDate != null ? Colors.white : WC.brown,
-                          ),
-                          if (_selectedDate != null) ...[
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () {
-                                setState(() => _selectedDate = null);
-                              },
-                              child: const Icon(Icons.close, size: 14, color: Colors.white),
+                            const SizedBox(width: 8),
+                            // Date Icon
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.calendar_month_rounded,
+                                    size: 18,
+                                    color: _selectedDate != null ? WC.terra : WC.brown,
+                                  ),
+                                  onPressed: _pickFilterDate,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                                if (_selectedDate != null)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: const BoxDecoration(
+                                        color: WC.terra,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
+                            const SizedBox(width: 8),
                           ],
-                        ],
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withOpacity(0.55),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: const BorderSide(color: WC.brown, width: 1.5),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _showOnlyCurrentDay = !_showOnlyCurrentDay;
+                      });
+                    },
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: Icon(
+                      _showOnlyCurrentDay ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      color: WC.brown,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _showOnlyCurrentDay ? "Show Prev" : "Hide Prev",
+                      style: const TextStyle(
+                        color: WC.brown,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
                       ),
                     ),
                   ),
                 ],
               ),
-            ),
-
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('leave_requests').snapshots(),
-              builder: (ctx, snap) {
-                final all = snap.data?.docs.length ?? 0;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: WC.brown,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text("All  ($all)",
-                            style: const TextStyle(color: Colors.white,
-                                fontWeight: FontWeight.bold, fontSize: 13)),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _showOnlyCurrentDay = !_showOnlyCurrentDay;
-                          });
-                        },
-                        icon: Icon(
-                          _showOnlyCurrentDay ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                          color: WC.brown,
-                          size: 18,
-                        ),
-                        label: Text(
-                          _showOnlyCurrentDay ? "Show Previous" : "Hide Previous",
-                          style: TextStyle(
-                            color: WC.brown,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
             ),
 
             Expanded(child: _LeaveList(
