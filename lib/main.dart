@@ -3,12 +3,10 @@ import 'package:attendance_system/services/mongodb_service.dart';
 import 'package:attendance_system/services/notification_service.dart';
 import 'auth_gate.dart';
 
-void main() async {
+import 'splash_screen.dart';
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await MongoDBService.init();
-  await NotificationService().init();
-
   runApp(const MyApp());
 }
 
@@ -34,7 +32,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: home ?? const AuthGate(),
+      home: home ?? const SplashScreen(),
     );
   }
 }

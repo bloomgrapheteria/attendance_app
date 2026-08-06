@@ -42,6 +42,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     if (user == null || user.email == null) return;
 
     final startTime = DateTime.now();
+    final Set<String> shownNotificationIds = {};
 
     _notificationSubscription = FirebaseFirestore.instance
         .collection('notifications')
@@ -49,16 +50,16 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
         .where('isRead', isEqualTo: false)
         .snapshots()
         .listen((snapshot) {
-      for (var change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.added) {
-          final data = change.doc.data() as Map<String, dynamic>?;
-          if (data != null) {
-            final timestamp = data['timestamp'] as Timestamp?;
-            if (timestamp != null && timestamp.toDate().isAfter(startTime)) {
-              final title = data['title'] ?? 'Notification';
-              final body = data['body'] ?? '';
-              NotificationService().showNotification(title, body);
-            }
+      for (var doc in snapshot.docs) {
+        if (shownNotificationIds.contains(doc.id)) continue;
+        final data = doc.data();
+        if (data != null) {
+          final timestamp = data['timestamp'] as Timestamp?;
+          if (timestamp != null && timestamp.toDate().isAfter(startTime)) {
+            shownNotificationIds.add(doc.id);
+            final title = data['title'] ?? 'Notification';
+            final body = data['body'] ?? '';
+            NotificationService().showNotification(title, body);
           }
         }
       }

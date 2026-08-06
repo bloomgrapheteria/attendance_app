@@ -313,7 +313,7 @@ class _StudentList extends StatelessWidget {
         final classId   = student?['classId'] ?? '';
 
         final initials = name.isNotEmpty
-            ? name.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase()
+            ? name.trim().split(' ').where((e) => e.isNotEmpty).map((e) => e[0]).take(2).join().toUpperCase()
             : '?';
 
         return Container(

@@ -365,7 +365,7 @@ class _LeaveCard extends StatelessWidget {
     final now       = DateTime.now();
     final todayDate = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
 
-    final initials    = name.isNotEmpty ? name.trim().split(' ').map((e) => e[0]).take(2).join().toUpperCase() : '?';
+    final initials    = name.isNotEmpty ? name.trim().split(' ').where((e) => e.isNotEmpty).map((e) => e[0]).take(2).join().toUpperCase() : '?';
     final accentColor = isExited ? AppTheme.primary : AppTheme.textDark;
 
     return GestureDetector(

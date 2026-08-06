@@ -9,7 +9,7 @@ class NotificationService {
 
   Future<void> init() async {
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
 
     const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -22,7 +22,7 @@ class NotificationService {
       iOS: iosSettings,
     );
 
-    await _localNotifications.initialize(settings);
+    await _localNotifications.initialize(settings: settings);
   }
 
   Future<void> showNotification(String title, String body) async {
@@ -45,11 +45,14 @@ class NotificationService {
       iOS: iosDetails,
     );
 
+    // Ensure we avoid overflow/negative values in the notification id
+    final int id = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
+
     await _localNotifications.show(
-      DateTime.now().millisecond,
-      title,
-      body,
-      details,
+      id: id,
+      title: title,
+      body: body,
+      notificationDetails: details,
     );
   }
 }
