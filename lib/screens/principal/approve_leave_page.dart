@@ -295,8 +295,10 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                         hintText: 'Search student...',
                         hintStyle: TextStyle(color: WC.brownLight.withOpacity(0.6), fontSize: 12),
                         prefixIcon: const Icon(Icons.search_rounded, color: WC.brown, size: 18),
+                        prefixIconColor: WC.brown,
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
                           children: [
                             // Filter Icon
                             Stack(
@@ -311,13 +313,13 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                                         : WC.brown,
                                   ),
                                   onPressed: _showFilterDialog,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.all(4),
                                   constraints: const BoxConstraints(),
                                 ),
                                 if (_selectedClass != 'All' || _selectedStatus != 'All')
                                   Positioned(
-                                    top: 4,
-                                    right: 4,
+                                    top: 2,
+                                    right: 2,
                                     child: Container(
                                       width: 6,
                                       height: 6,
@@ -341,13 +343,13 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                                     color: _selectedDate != null ? WC.terra : WC.brown,
                                   ),
                                   onPressed: _pickFilterDate,
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.all(4),
                                   constraints: const BoxConstraints(),
                                 ),
                                 if (_selectedDate != null)
                                   Positioned(
-                                    top: 4,
-                                    right: 4,
+                                    top: 2,
+                                    right: 2,
                                     child: Container(
                                       width: 6,
                                       height: 6,
@@ -359,7 +361,7 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                                   ),
                               ],
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 12),
                           ],
                         ),
                         filled: true,
