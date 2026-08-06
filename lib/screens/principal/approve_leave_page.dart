@@ -24,11 +24,32 @@ class ApproveLeavePage extends StatefulWidget {
 class _ApproveLeavePageState extends State<ApproveLeavePage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  String _searchQuery = '';
+  String _selectedClass = 'All';
+  String _selectedStatus = 'All';
+  DateTime? _selectedDate;
+  List<String> _classOptions = ['All'];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
+    _loadClasses();
+  }
+
+  Future<void> _loadClasses() async {
+    try {
+      final snap = await FirebaseFirestore.instance.collection('classes').get();
+      final list = snap.docs.map((c) {
+        return c.id.contains('_') ? c.id.split('_').last : c.id;
+      }).toSet().toList();
+      list.sort();
+      if (mounted) {
+        setState(() {
+          _classOptions = ['All', ...list];
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -98,6 +119,141 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
               ]),
             ),
 
+            // Search Panel
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: TextField(
+                onChanged: (val) => setState(() => _searchQuery = val),
+                style: const TextStyle(color: WC.brown, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search by student name or class...',
+                  hintStyle: TextStyle(color: WC.brownLight.withOpacity(0.6), fontSize: 13),
+                  prefixIcon: const Icon(Icons.search_rounded, color: WC.brown, size: 20),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.55),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide(color: WC.brown.withOpacity(0.15)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: const BorderSide(color: WC.brown, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+              ),
+            ),
+
+            // Filters Panel
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  // Class Dropdown
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: WC.brown.withOpacity(0.15)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedClass,
+                          dropdownColor: WC.cardBg,
+                          style: const TextStyle(color: WC.brown, fontSize: 12, fontWeight: FontWeight.bold),
+                          isExpanded: true,
+                          items: _classOptions.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                          onChanged: (val) => setState(() => _selectedClass = val ?? 'All'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Status Dropdown
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: WC.brown.withOpacity(0.15)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedStatus,
+                          dropdownColor: WC.cardBg,
+                          style: const TextStyle(color: WC.brown, fontSize: 12, fontWeight: FontWeight.bold),
+                          isExpanded: true,
+                          items: ['All', 'Pending', 'Approved', 'Rejected', 'Arrived', 'Exit Complete', 'Completed']
+                              .map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                          onChanged: (val) => setState(() => _selectedStatus = val ?? 'All'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Date Picker Button
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate ?? DateTime.now(),
+                        firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: WC.brown,
+                                onPrimary: Colors.white,
+                                onSurface: WC.brown,
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null) {
+                        setState(() => _selectedDate = picked);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: _selectedDate != null ? WC.brown : Colors.white.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: WC.brown.withOpacity(0.15)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_month_rounded, 
+                            size: 16, 
+                            color: _selectedDate != null ? Colors.white : WC.brown,
+                          ),
+                          if (_selectedDate != null) ...[
+                            const SizedBox(width: 4),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() => _selectedDate = null);
+                              },
+                              child: const Icon(Icons.close, size: 14, color: Colors.white),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('leave_requests').snapshots(),
@@ -147,6 +303,10 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
             Expanded(child: _LeaveList(
                 filter: 'all',
                 showOnlyCurrentDay: _showOnlyCurrentDay,
+                searchQuery: _searchQuery,
+                selectedClass: _selectedClass,
+                selectedStatus: _selectedStatus,
+                selectedDate: _selectedDate,
                 onUpdate: _updateStatus,
                 onReject: _confirmReject)),
           ]),
@@ -162,12 +322,20 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
 class _LeaveList extends StatelessWidget {
   final String filter;
   final bool showOnlyCurrentDay;
+  final String searchQuery;
+  final String selectedClass;
+  final String selectedStatus;
+  final DateTime? selectedDate;
   final Future<void> Function(String, String) onUpdate;
   final Future<void> Function(String) onReject;
 
   const _LeaveList({
     required this.filter,
     required this.showOnlyCurrentDay,
+    required this.searchQuery,
+    required this.selectedClass,
+    required this.selectedStatus,
+    required this.selectedDate,
     required this.onUpdate,
     required this.onReject,
   });
@@ -205,6 +373,34 @@ class _LeaveList extends StatelessWidget {
     return false;
   }
 
+  String _getEffectiveStatus(Map<String, dynamic> data) {
+    final status = data['status'] ?? 'pending';
+    final exitStatus = (data['exitStatus'] ?? 'pending_exit').toString();
+    
+    // Check if past
+    bool isPast = false;
+    final toDateVal = data['toDate'] ?? data['fromDate'];
+    if (toDateVal is String && toDateVal.isNotEmpty) {
+      try {
+        final parsed = DateTime.tryParse(toDateVal);
+        if (parsed != null) {
+          final endOfDay = DateTime(parsed.year, parsed.month, parsed.day, 23, 59, 59);
+          if (DateTime.now().isAfter(endOfDay)) {
+            isPast = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (status == 'pending') return 'Pending';
+    if (status == 'rejected') return 'Rejected';
+    
+    if (isPast) return 'Completed';
+    if (exitStatus == 'arrived') return 'Arrived';
+    if (exitStatus == 'exited') return 'Exit Complete';
+    return 'Approved';
+  }
+
   @override
   Widget build(BuildContext context) {
     Query q = FirebaseFirestore.instance
@@ -227,6 +423,64 @@ class _LeaveList extends StatelessWidget {
           docs = docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
             return _isCurrentDay(data);
+          }).toList();
+        }
+
+        // Apply Search Query
+        if (searchQuery.isNotEmpty) {
+          final query = searchQuery.toLowerCase().trim();
+          docs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final type = data['type'] ?? 'student';
+            final name = (type == 'student'
+                ? (data['studentName'] ?? '')
+                : (data['teacherName'] ?? '')).toString().toLowerCase();
+            final classId = (data['classId'] ?? '').toString().toLowerCase();
+            return name.contains(query) || classId.contains(query);
+          }).toList();
+        }
+
+        // Apply Class Filter
+        if (selectedClass != 'All') {
+          final targetClass = selectedClass.toLowerCase().trim();
+          docs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final classId = (data['classId'] ?? '').toString().toLowerCase();
+            final cleanClassId = classId.contains('_') ? classId.split('_').last : classId;
+            return cleanClassId.trim() == targetClass;
+          }).toList();
+        }
+
+        // Apply Status Filter
+        if (selectedStatus != 'All') {
+          docs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final effStatus = _getEffectiveStatus(data);
+            return effStatus.toLowerCase() == selectedStatus.toLowerCase();
+          }).toList();
+        }
+
+        // Apply Date Filter
+        if (selectedDate != null) {
+          final filterDateStr = "${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}";
+          docs = docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final fromDate = (data['fromDate'] ?? '').toString();
+            final toDate = (data['toDate'] ?? '').toString();
+            
+            if (fromDate == filterDateStr || toDate == filterDateStr) return true;
+            try {
+              final start = DateTime.tryParse(fromDate);
+              final end = DateTime.tryParse(toDate);
+              if (start != null && end != null) {
+                final target = DateTime(selectedDate!.year, selectedDate!.month, selectedDate!.day);
+                final sDay = DateTime(start.year, start.month, start.day);
+                final eDay = DateTime(end.year, end.month, end.day);
+                return (target.isAfter(sDay) || target.isAtSameMomentAs(sDay)) &&
+                       (target.isBefore(eDay) || target.isAtSameMomentAs(eDay));
+              }
+            } catch (_) {}
+            return false;
           }).toList();
         }
 
@@ -348,18 +602,52 @@ class _LeaveCardContent extends StatelessWidget {
         ? name.trim().split(' ').where((String e) => e.isNotEmpty).map((e) => e[0]).take(2).join().toUpperCase()
         : '?';
 
-    Color stColor; Color stBg; String stLabel;
-    switch (status) {
-      case 'approved':
-        stColor = WC.green; stBg = WC.green.withOpacity(0.12);
-        stLabel = "Approved"; break;
-      case 'rejected':
-        stColor = WC.red; stBg = WC.red.withOpacity(0.12);
-        stLabel = "Rejected"; break;
-      default:
-        stColor = WC.amber; stBg = WC.amber.withOpacity(0.15);
-        stLabel = "Pending";
+    // Check if past
+    bool isPast = false;
+    final toDateVal = data['toDate'] ?? data['fromDate'];
+    if (toDateVal is String && toDateVal.isNotEmpty) {
+      try {
+        final parsed = DateTime.tryParse(toDateVal);
+        if (parsed != null) {
+          final endOfDay = DateTime(parsed.year, parsed.month, parsed.day, 23, 59, 59);
+          if (DateTime.now().isAfter(endOfDay)) {
+            isPast = true;
+          }
+        }
+      } catch (_) {}
     }
+
+    Color stColor; Color stBg; String stLabel;
+    if (status == 'pending') {
+      stColor = WC.amber; stBg = WC.amber.withOpacity(0.15);
+      stLabel = "Pending";
+    } else if (status == 'rejected') {
+      stColor = WC.red; stBg = WC.red.withOpacity(0.12);
+      stLabel = "Rejected";
+    } else {
+      if (isPast) {
+        stColor = Colors.grey; stBg = Colors.grey.withOpacity(0.15);
+        stLabel = "Completed";
+      } else if (exitStatus == 'arrived') {
+        stColor = WC.green; stBg = WC.green.withOpacity(0.12);
+        stLabel = "Arrived";
+      } else if (exitStatus == 'exited') {
+        stColor = WC.green; stBg = WC.green.withOpacity(0.12);
+        stLabel = "Exit Complete";
+      } else {
+        stColor = WC.green; stBg = WC.green.withOpacity(0.12);
+        stLabel = "Approved";
+      }
+    }
+
+    final trackingDotColor = isPast 
+        ? Colors.grey 
+        : (hasExited ? WC.green : WC.amber);
+    final trackingLabel = isPast
+        ? "Completed"
+        : (hasExited 
+            ? "Live" 
+            : (status == 'pending' ? "Waiting" : "Watching"));
 
     final exitColor = hasExited ? WC.green : WC.terra;
     final exitBg    = hasExited
@@ -492,10 +780,10 @@ class _LeaveCardContent extends StatelessWidget {
                 const Spacer(),
                 Container(width: 7, height: 7,
                     decoration: BoxDecoration(
-                        color: hasExited ? WC.green : WC.amber,
+                        color: trackingDotColor,
                         shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                Text(hasExited ? "Live" : "Watching",
+                Text(trackingLabel,
                     style: TextStyle(fontSize: 10, color: WC.brownLight)),
               ]),
 
