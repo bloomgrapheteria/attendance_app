@@ -132,10 +132,28 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     child: Row(
                                       children: [
-                                        Icon(
-                                          isSel ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                                          size: 16,
-                                          color: isSel ? WC.terra : WC.brownLight,
+                                        Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSel ? WC.terra : WC.brownLight,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: isSel
+                                              ? Center(
+                                                  child: Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: const BoxDecoration(
+                                                      color: WC.terra,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                )
+                                              : null,
                                         ),
                                         const SizedBox(width: 6),
                                         Expanded(
@@ -174,10 +192,28 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                                     padding: const EdgeInsets.symmetric(vertical: 6),
                                     child: Row(
                                       children: [
-                                        Icon(
-                                          isSel ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                                          size: 16,
-                                          color: isSel ? WC.terra : WC.brownLight,
+                                        Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSel ? WC.terra : WC.brownLight,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: isSel
+                                              ? Center(
+                                                  child: Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    decoration: const BoxDecoration(
+                                                      color: WC.terra,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                )
+                                              : null,
                                         ),
                                         const SizedBox(width: 6),
                                         Expanded(
@@ -306,7 +342,7 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                               children: [
                                 IconButton(
                                   icon: Icon(
-                                    Icons.filter_alt_rounded,
+                                    Icons.manage_search_rounded,
                                     size: 18,
                                     color: (_selectedClass != 'All' || _selectedStatus != 'All')
                                         ? WC.terra
@@ -338,7 +374,7 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                               children: [
                                 IconButton(
                                   icon: Icon(
-                                    Icons.calendar_month_rounded,
+                                    Icons.calendar_today_rounded,
                                     size: 18,
                                     color: _selectedDate != null ? WC.terra : WC.brown,
                                   ),

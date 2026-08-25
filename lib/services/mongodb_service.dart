@@ -110,16 +110,132 @@ class MongoDBService {
   static final StreamController<String> _dbUpdates = StreamController<String>.broadcast();
   static final Map<String, _CacheEntry> _cache = {};
 
+  // Local caching layers for offline-first support
+  static Map<String, dynamic> _localDb = {};
+  static List<Map<String, dynamic>> _writeQueue = [];
+  static Map<String, dynamic> _queryCache = {};
+  static bool _syncing = false;
+
   static Future<void> init() async {
     print("REST API client initialized. Base URL: $baseUrl");
     // Restore authenticated session from SharedPreferences
     await FirebaseAuth.initPrefs();
+
+    // Restore cached collections
+    final cacheStr = FirebaseAuth._prefs?.getString('local_mongodb_cache_v1');
+    if (cacheStr != null && cacheStr.isNotEmpty) {
+      try {
+        _localDb = jsonDecode(cacheStr) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    // Restore offline write queue
+    final queueStr = FirebaseAuth._prefs?.getString('local_mongodb_queue_v1');
+    if (queueStr != null && queueStr.isNotEmpty) {
+      try {
+        final list = jsonDecode(queueStr) as List<dynamic>;
+        _writeQueue = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      } catch (_) {}
+    }
+
+    // Restore queries cache
+    final qCacheStr = FirebaseAuth._prefs?.getString('local_mongodb_query_cache_v1');
+    if (qCacheStr != null && qCacheStr.isNotEmpty) {
+      try {
+        _queryCache = jsonDecode(qCacheStr) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
     // Non-blocking background ping to warm up the backend server (mitigates Render/serverless cold starts)
     unawaited(
       http.get(Uri.parse('$baseUrl/documents/schools?limit=1'))
         .timeout(const Duration(seconds: 15))
         .catchError((_) => http.Response('', 500))
     );
+
+    // Initialize the background sync loop
+    _startSyncLoop();
+  }
+
+  static void cacheDoc(String col, String docId, Map<String, dynamic> data) {
+    _localDb.putIfAbsent(col, () => {});
+    _localDb[col]![docId] = data;
+    _saveCache();
+  }
+
+  static void cacheQuery(String key, List<String> docIds) {
+    _queryCache[key] = docIds;
+    _saveQueryCache();
+  }
+
+  static Future<void> _saveCache() async {
+    try {
+      await FirebaseAuth._prefs?.setString('local_mongodb_cache_v1', jsonEncode(_localDb));
+    } catch (_) {}
+  }
+
+  static Future<void> _saveQueue() async {
+    try {
+      await FirebaseAuth._prefs?.setString('local_mongodb_queue_v1', jsonEncode(_writeQueue));
+    } catch (_) {}
+  }
+
+  static Future<void> _saveQueryCache() async {
+    try {
+      await FirebaseAuth._prefs?.setString('local_mongodb_query_cache_v1', jsonEncode(_queryCache));
+    } catch (_) {}
+  }
+
+  static void _startSyncLoop() {
+    Timer.periodic(const Duration(seconds: 15), (_) => _syncQueue());
+    _syncQueue();
+  }
+
+  static Future<void> _syncQueue() async {
+    if (_syncing || _writeQueue.isEmpty) return;
+    _syncing = true;
+    try {
+      while (_writeQueue.isNotEmpty) {
+        final task = _writeQueue.first;
+        final op = task['op'];
+        final col = task['collection'];
+        final resolvedId = task['id'];
+        final data = task['data'] as Map<String, dynamic>?;
+
+        bool success = false;
+        try {
+          if (op == 'set') {
+            final response = await http.post(
+              Uri.parse('$baseUrl/documents/$col/$resolvedId'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(data),
+            ).timeout(const Duration(seconds: 5));
+            if (response.statusCode == 200) success = true;
+          } else if (op == 'update') {
+            final response = await http.put(
+              Uri.parse('$baseUrl/documents/$col/$resolvedId'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(data),
+            ).timeout(const Duration(seconds: 5));
+            if (response.statusCode == 200) success = true;
+          } else if (op == 'delete') {
+            final response = await http.delete(
+              Uri.parse('$baseUrl/documents/$col/$resolvedId'),
+            ).timeout(const Duration(seconds: 5));
+            if (response.statusCode == 200) success = true;
+          }
+        } catch (_) {}
+
+        if (success) {
+          _writeQueue.removeAt(0);
+          await _saveQueue();
+        } else {
+          break; // Stop sync loop if we are still offline or endpoint fails
+        }
+      }
+    } finally {
+      _syncing = false;
+    }
   }
 
   static void notifyUpdate(String collectionName) {
@@ -232,24 +348,29 @@ class DocumentReference {
     }
 
     final cleanData = _normalizeData(data);
-    
-    // Inject schoolId automatically if user is logged in
     final schoolId = FirebaseAuth.instance.currentSchoolId;
     if (schoolId != null && !cleanData.containsKey('schoolId') && collectionPath != 'schools') {
       cleanData['schoolId'] = schoolId;
     }
 
     final jsonPayload = _serializeForJson(cleanData);
-    final response = await http.post(
-      Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(jsonPayload),
-    );
+    final localData = Map<String, dynamic>.from(jsonPayload);
+    localData['_id'] = _resolvedId;
 
-    if (response.statusCode != 200) {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to save document');
-    }
+    // Cache locally first
+    MongoDBService.cacheDoc(collectionPath, _resolvedId, localData);
 
+    // Queue operation
+    MongoDBService._writeQueue.add({
+      'op': 'set',
+      'collection': collectionPath,
+      'id': _resolvedId,
+      'data': localData,
+    });
+    await MongoDBService._saveQueue();
+
+    // Trigger sync in background
+    unawaited(MongoDBService._syncQueue());
     MongoDBService.notifyUpdate(collectionPath);
   }
 
@@ -274,56 +395,82 @@ class DocumentReference {
       payload[r'$unset'] = unsetFields;
     }
 
-    final response = await http.put(
-      Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to update document');
+    // Cache locally first
+    final existing = MongoDBService._localDb[collectionPath]?[_resolvedId] as Map<String, dynamic>? ?? {};
+    final updated = Map<String, dynamic>.from(existing);
+    if (cleanData.isNotEmpty) {
+      _serializeForJson(cleanData).forEach((k, v) {
+        updated[k.toString()] = v;
+      });
     }
+    if (unsetFields.isNotEmpty) {
+      unsetFields.keys.forEach(updated.remove);
+    }
+    MongoDBService.cacheDoc(collectionPath, _resolvedId, updated);
 
+    // Queue operation
+    MongoDBService._writeQueue.add({
+      'op': 'update',
+      'collection': collectionPath,
+      'id': _resolvedId,
+      'data': payload,
+    });
+    await MongoDBService._saveQueue();
+
+    // Trigger sync in background
+    unawaited(MongoDBService._syncQueue());
     MongoDBService.notifyUpdate(collectionPath);
   }
 
   Future<void> delete() async {
-    final response = await http.delete(
-      Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception(jsonDecode(response.body)['error'] ?? 'Failed to delete document');
+    // Cache locally first
+    if (MongoDBService._localDb[collectionPath] != null) {
+      MongoDBService._localDb[collectionPath]!.remove(_resolvedId);
+      await MongoDBService._saveCache();
     }
 
+    // Queue operation
+    MongoDBService._writeQueue.add({
+      'op': 'delete',
+      'collection': collectionPath,
+      'id': _resolvedId,
+    });
+    await MongoDBService._saveQueue();
+
+    // Trigger sync in background
+    unawaited(MongoDBService._syncQueue());
     MongoDBService.notifyUpdate(collectionPath);
   }
 
   Future<DocumentSnapshot> _fetchRaw() async {
-    final response = await http.get(
-      Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
+      ).timeout(const Duration(milliseconds: 2500));
 
-    if (response.statusCode != 200) {
-      throw Exception('Failed to get document');
-    }
+      if (response.statusCode == 200) {
+        final body = response.body.trim();
+        if (body.isEmpty || body == 'null') {
+          return DocumentSnapshot(id, null, collectionPath);
+        }
 
-    final body = response.body.trim();
-    if (body.isEmpty || body == 'null') {
-      return DocumentSnapshot(id, null, collectionPath);
-    }
+        final doc = jsonDecode(response.body) as Map<String, dynamic>;
+        if (collectionPath == 'users' && doc['_id'] == FirebaseAuth.instance.currentUser?.uid) {
+          FirebaseAuth.instance.currentSchoolId = doc['schoolId'] as String?;
+        }
+        // Save to cache
+        MongoDBService.cacheDoc(collectionPath, _resolvedId, doc);
+        return DocumentSnapshot(id, doc, collectionPath);
+      }
+    } catch (_) {}
 
-    final doc = jsonDecode(response.body) as Map<String, dynamic>;
-    if (collectionPath == 'users' && doc['_id'] == FirebaseAuth.instance.currentUser?.uid) {
-      FirebaseAuth.instance.currentSchoolId = doc['schoolId'] as String?;
-    }
-    return DocumentSnapshot(id, doc, collectionPath);
+    // Offline fallback
+    final cached = MongoDBService._localDb[collectionPath]?[_resolvedId] as Map<String, dynamic>?;
+    return DocumentSnapshot(id, cached, collectionPath);
   }
 
   Future<DocumentSnapshot> get() async {
-    final cacheKey = 'doc:$collectionPath:$_resolvedId';
-    final dynamic cached = await MongoDBService.getCached(cacheKey, () => _fetchRaw(), maxAge: const Duration(seconds: 4));
-    return cached as DocumentSnapshot;
+    return _fetchRaw();
   }
 
   Stream<DocumentSnapshot> snapshots() {
@@ -431,6 +578,43 @@ class Query {
     return Query(collectionPath, _filters, _limit, field, descending);
   }
 
+  List<dynamic> _filterLocalDocs() {
+    final col = MongoDBService._localDb[collectionPath] as Map<String, dynamic>? ?? {};
+    final list = col.values.toList();
+    
+    var filtered = list.where((doc) {
+      final docMap = doc as Map<String, dynamic>;
+      for (final entry in _filters.entries) {
+        final key = entry.key;
+        final val = entry.value;
+        if (docMap[key] != val) {
+          if (val is Map && val.containsKey(r'$in')) {
+            final allowed = val[r'$in'] as List;
+            if (!allowed.contains(docMap[key])) return false;
+          } else {
+            return false;
+          }
+        }
+      }
+      return true;
+    }).toList();
+    
+    if (_orderByField != null) {
+      filtered.sort((a, b) {
+        final valA = a[_orderByField] ?? '';
+        final valB = b[_orderByField] ?? '';
+        final comp = valA.toString().compareTo(valB.toString());
+        return _orderByDescending ? -comp : comp;
+      });
+    }
+    
+    if (_limit != null && filtered.length > _limit!) {
+      filtered = filtered.sublist(0, _limit);
+    }
+    
+    return filtered;
+  }
+
   Future<QuerySnapshot> _fetchRaw() async {
     final schoolId = FirebaseAuth.instance.currentSchoolId;
     final Map<String, dynamic> activeFilters = Map<String, dynamic>.from(_filters);
@@ -459,36 +643,54 @@ class Query {
     }
 
     final uri = Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath').replace(queryParameters: params);
-    final response = await http.get(uri);
     
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load documents: ${response.body}');
+    try {
+      final response = await http.get(uri).timeout(const Duration(milliseconds: 2500));
+      
+      if (response.statusCode == 200) {
+        final List<dynamic> list = jsonDecode(response.body);
+        final docs = list.map((item) {
+          final map = item as Map<String, dynamic>;
+          final docId = map['_id']?.toString() ?? '';
+          MongoDBService.cacheDoc(collectionPath, docId, map);
+          return QueryDocumentSnapshot(docId, map, collectionPath);
+        }).toList();
+
+        final cacheKey = 'query:$collectionPath:${jsonEncode(cleanFilters)}:$_limit:$_orderByField:$_orderByDescending';
+        MongoDBService.cacheQuery(cacheKey, docs.map((d) => d.id).toList());
+
+        return QuerySnapshot(docs);
+      }
+    } catch (_) {}
+
+    // Offline query fallback from cached query result
+    final cacheKey = 'query:$collectionPath:${jsonEncode(cleanFilters)}:$_limit:$_orderByField:$_orderByDescending';
+    final queryDocIds = MongoDBService._queryCache[cacheKey] as List<dynamic>?;
+    
+    if (queryDocIds != null) {
+      final docs = <QueryDocumentSnapshot>[];
+      for (final id in queryDocIds) {
+        final map = MongoDBService._localDb[collectionPath]?[id] as Map<String, dynamic>?;
+        if (map != null) {
+          docs.add(QueryDocumentSnapshot(id, map, collectionPath));
+        }
+      }
+      return QuerySnapshot(docs);
     }
 
-    final List<dynamic> list = jsonDecode(response.body);
-    final docs = list.map((item) {
+    // Dynamic filtering fallback from all local cached documents
+    final localFiltered = _filterLocalDocs();
+    final docs = localFiltered.map((item) {
       final map = item as Map<String, dynamic>;
       final docId = map['_id']?.toString() ?? '';
       return QueryDocumentSnapshot(docId, map, collectionPath);
     }).toList();
-
+    
     return QuerySnapshot(docs);
   }
 
   Future<QuerySnapshot> get() async {
-    final schoolId = FirebaseAuth.instance.currentSchoolId;
-    final Map<String, dynamic> activeFilters = Map<String, dynamic>.from(_filters);
-    if (schoolId != null && 
-        collectionPath != 'schools' && 
-        collectionPath != 'users' && 
-        !activeFilters.containsKey('schoolId')) {
-      activeFilters['schoolId'] = schoolId;
-    }
-    final cleanFilters = _serializeForJson(activeFilters);
-    final cacheKey = 'query:$collectionPath:${jsonEncode(cleanFilters)}:$_limit:$_orderByField:$_orderByDescending';
-    
-    final dynamic cached = await MongoDBService.getCached(cacheKey, () => _fetchRaw(), maxAge: const Duration(seconds: 4));
-    return cached as QuerySnapshot;
+    return _fetchRaw();
   }
 
   Stream<QuerySnapshot> snapshots() {
