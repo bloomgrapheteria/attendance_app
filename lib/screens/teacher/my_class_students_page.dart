@@ -136,7 +136,7 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                                     leading: CircleAvatar(
                                       backgroundColor: AppTheme.primary.withOpacity(0.1),
                                       child: Text(
-                                        name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                        roll,
                                         style: TextStyle(
                                           color: AppTheme.primary,
                                           fontWeight: FontWeight.bold,
@@ -154,12 +154,10 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         const SizedBox(height: 4),
+                                        Text("GR Number: $gr", style: TextStyle(fontSize: 12, color: AppTheme.textDark.withOpacity(0.7))),
+                                        const SizedBox(height: 2),
                                         Row(
                                           children: [
-                                            Text("Roll: $roll", style: const TextStyle(fontSize: 12)),
-                                            const SizedBox(width: 12),
-                                            Text("GR: $gr", style: const TextStyle(fontSize: 12)),
-                                            const Spacer(),
                                             Text(
                                               gender.toUpperCase(),
                                               style: TextStyle(
@@ -170,12 +168,18 @@ class _MyClassStudentsPageState extends State<MyClassStudentsPage> {
                                                     : Colors.pink.shade700,
                                               ),
                                             ),
+                                            if (phone != '—' && phone.isNotEmpty) ...[
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  "Contact: $phone",
+                                                  style: TextStyle(fontSize: 11, color: AppTheme.textDark.withOpacity(0.5)),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
-                                        if (phone != '—' && phone.isNotEmpty) ...[
-                                          const SizedBox(height: 2),
-                                          Text("Parent Contact: $phone", style: const TextStyle(fontSize: 12)),
-                                        ],
                                       ],
                                     ),
                                   ),

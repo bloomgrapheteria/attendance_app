@@ -289,6 +289,35 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
     }
   }
 
+  Widget _buildFilterChip(String label, VoidCallback onRemove) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: WC.terra.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: WC.terra.withOpacity(0.3), width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: WC.brown, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(
+              Icons.close_rounded,
+              size: 11,
+              color: WC.terra,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -332,72 +361,122 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                         hintStyle: TextStyle(color: WC.brownLight.withOpacity(0.6), fontSize: 12),
                         prefixIcon: const Icon(Icons.search_rounded, color: WC.brown, size: 18),
                         prefixIconColor: WC.brown,
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            // Filter Icon
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.manage_search_rounded,
-                                    size: 18,
-                                    color: (_selectedClass != 'All' || _selectedStatus != 'All')
-                                        ? WC.terra
-                                        : WC.brown,
-                                  ),
-                                  onPressed: _showFilterDialog,
-                                  padding: const EdgeInsets.all(4),
-                                  constraints: const BoxConstraints(),
-                                ),
-                                if (_selectedClass != 'All' || _selectedStatus != 'All')
-                                  Positioned(
-                                    top: 2,
-                                    right: 2,
-                                    child: Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: const BoxDecoration(
-                                        color: WC.terra,
-                                        shape: BoxShape.circle,
-                                      ),
+                        suffixIcon: PopupMenuButton<String>(
+                          icon: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Icon(
+                                Icons.manage_search_rounded,
+                                size: 22,
+                                color: (_selectedClass != 'All' || _selectedStatus != 'All' || _selectedDate != null)
+                                    ? WC.terra
+                                    : WC.brown,
+                              ),
+                              if (_selectedClass != 'All' || _selectedStatus != 'All' || _selectedDate != null)
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: WC.terra,
+                                      shape: BoxShape.circle,
                                     ),
                                   ),
-                              ],
-                            ),
-                            const SizedBox(width: 8),
-                            // Date Icon
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.calendar_today_rounded,
-                                    size: 18,
-                                    color: _selectedDate != null ? WC.terra : WC.brown,
-                                  ),
-                                  onPressed: _pickFilterDate,
-                                  padding: const EdgeInsets.all(4),
-                                  constraints: const BoxConstraints(),
                                 ),
-                                if (_selectedDate != null)
-                                  Positioned(
-                                    top: 2,
-                                    right: 2,
-                                    child: Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: const BoxDecoration(
-                                        color: WC.terra,
-                                        shape: BoxShape.circle,
-                                      ),
+                            ],
+                          ),
+                          tooltip: 'Show filter options',
+                          color: WC.cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: WC.brown.withOpacity(0.15)),
+                          ),
+                          onSelected: (value) {
+                            if (value == 'class_status') {
+                              _showFilterDialog();
+                            } else if (value == 'date') {
+                              _pickFilterDate();
+                            } else if (value == 'clear') {
+                              setState(() {
+                                _selectedClass = 'All';
+                                _selectedStatus = 'All';
+                                _selectedDate = null;
+                              });
+                            }
+                          },
+                          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                            PopupMenuItem<String>(
+                              value: 'class_status',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: (_selectedClass != 'All' || _selectedStatus != 'All') ? WC.terra : Colors.transparent,
+                                      border: Border.all(color: WC.brownLight, width: 1),
                                     ),
                                   ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Filter by Class & Status',
+                                    style: TextStyle(
+                                      color: WC.brown,
+                                      fontSize: 13,
+                                      fontWeight: (_selectedClass != 'All' || _selectedStatus != 'All') ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 12),
+                            PopupMenuItem<String>(
+                              value: 'date',
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: (_selectedDate != null) ? WC.terra : Colors.transparent,
+                                      border: Border.all(color: WC.brownLight, width: 1),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Filter by Date',
+                                    style: TextStyle(
+                                      color: WC.brown,
+                                      fontSize: 13,
+                                      fontWeight: (_selectedDate != null) ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_selectedClass != 'All' || _selectedStatus != 'All' || _selectedDate != null) ...[
+                              const PopupMenuDivider(height: 1),
+                              PopupMenuItem<String>(
+                                value: 'clear',
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.clear_all_rounded, size: 16, color: WC.terra),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Clear All Filters',
+                                      style: TextStyle(
+                                        color: WC.terra,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         filled: true,
@@ -447,6 +526,36 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                 ],
               ),
             ),
+
+            // Active Filters Chips (displays when filters are active)
+            if (_selectedClass != 'All' || _selectedStatus != 'All' || _selectedDate != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          if (_selectedClass != 'All')
+                            _buildFilterChip("Class: $_selectedClass", () {
+                              setState(() => _selectedClass = 'All');
+                            }),
+                          if (_selectedStatus != 'All')
+                            _buildFilterChip("Status: $_selectedStatus", () {
+                              setState(() => _selectedStatus = 'All');
+                            }),
+                          if (_selectedDate != null)
+                            _buildFilterChip("Date: ${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}", () {
+                              setState(() => _selectedDate = null);
+                            }),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             Expanded(child: _LeaveList(
                 filter: 'all',

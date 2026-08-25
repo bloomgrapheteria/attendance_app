@@ -489,7 +489,7 @@ class _StaffStudentListPageState extends State<StaffStudentListPage> {
                     controller: _searchCtrl,
                     style: const TextStyle(color: Colors.black87, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: 'Search by name…',
+                      hintText: _isStaff ? 'Search by name…' : 'Search by name, GR, or Roll No…',
                       hintStyle: const TextStyle(
                           color: Color(0xFF888888),
                           fontSize: 13),
@@ -534,14 +534,19 @@ class _StaffStudentListPageState extends State<StaffStudentListPage> {
                       );
                     }
 
-                    // ── Case-insensitive name filter ──────────────────────
+                    // ── Case-insensitive query filter (Name, GR, or Roll No) ──────────────────────
                     final docs = snap.data!.docs.where((doc) {
                       if (_query.isEmpty) return true;
-                      final name = ((doc.data() as Map<String, dynamic>)['name']
-                          ?.toString() ??
-                          '')
-                          .toLowerCase();
-                      return name.contains(_query);
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name = (data['name'] ?? '').toString().toLowerCase();
+                      
+                      if (_isStaff) {
+                        return name.contains(_query);
+                      } else {
+                        final gr = (data['grNumber'] ?? '').toString().toLowerCase();
+                        final roll = (data['rollNo'] ?? '').toString().toLowerCase();
+                        return name.contains(_query) || gr.contains(_query) || roll.contains(_query);
+                      }
                     }).toList();
 
                     if (docs.isEmpty) {
