@@ -365,9 +365,7 @@ class _ApproveLeavePageState extends State<ApproveLeavePage>
                           icon: Stack(
                             alignment: Alignment.center,
                             children: [
-                              Icon(
-                                Icons.manage_search_rounded,
-                                size: 22,
+                              CustomFilterIcon(
                                 color: (_selectedClass != 'All' || _selectedStatus != 'All' || _selectedDate != null)
                                     ? WC.terra
                                     : WC.brown,
@@ -1152,5 +1150,26 @@ class _ExitInfoRow extends StatelessWidget {
               color: valueColor ?? WC.brown),
           overflow: TextOverflow.ellipsis)),
     ]);
+  }
+}
+
+class CustomFilterIcon extends StatelessWidget {
+  final Color color;
+  const CustomFilterIcon({super.key, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 18,
+      height: 12,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(height: 2, width: 18, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(1))),
+          Container(height: 2, width: 12, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(1))),
+          Container(height: 2, width: 6, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(1))),
+        ],
+      ),
+    );
   }
 }

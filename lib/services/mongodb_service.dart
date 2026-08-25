@@ -203,6 +203,7 @@ class MongoDBService {
         final data = task['data'] as Map<String, dynamic>?;
 
         bool success = false;
+        bool shouldDiscard = false;
         try {
           if (op == 'set') {
             final response = await http.post(
@@ -210,27 +211,39 @@ class MongoDBService {
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(data),
             ).timeout(const Duration(seconds: 5));
-            if (response.statusCode == 200) success = true;
+            if (response.statusCode == 200) {
+              success = true;
+            } else if (response.statusCode >= 400 && response.statusCode < 500) {
+              shouldDiscard = true;
+            }
           } else if (op == 'update') {
             final response = await http.put(
               Uri.parse('$baseUrl/documents/$col/$resolvedId'),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode(data),
             ).timeout(const Duration(seconds: 5));
-            if (response.statusCode == 200) success = true;
+            if (response.statusCode == 200) {
+              success = true;
+            } else if (response.statusCode >= 400 && response.statusCode < 500) {
+              shouldDiscard = true;
+            }
           } else if (op == 'delete') {
             final response = await http.delete(
               Uri.parse('$baseUrl/documents/$col/$resolvedId'),
             ).timeout(const Duration(seconds: 5));
-            if (response.statusCode == 200) success = true;
+            if (response.statusCode == 200) {
+              success = true;
+            } else if (response.statusCode >= 400 && response.statusCode < 500) {
+              shouldDiscard = true;
+            }
           }
         } catch (_) {}
 
-        if (success) {
+        if (success || shouldDiscard) {
           _writeQueue.removeAt(0);
           await _saveQueue();
         } else {
-          break; // Stop sync loop if we are still offline or endpoint fails
+          break; // Stop sync loop if we are still offline or server has a temporary 5xx failure
         }
       }
     } finally {
