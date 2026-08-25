@@ -446,7 +446,7 @@ class DocumentReference {
     try {
       final response = await http.get(
         Uri.parse('${MongoDBService.baseUrl}/documents/$collectionPath/$_resolvedId'),
-      ).timeout(const Duration(milliseconds: 2500));
+      ).timeout(const Duration(milliseconds: 5000));
 
       if (response.statusCode == 200) {
         final body = response.body.trim();
@@ -457,6 +457,14 @@ class DocumentReference {
         final doc = jsonDecode(response.body) as Map<String, dynamic>;
         if (collectionPath == 'users' && doc['_id'] == FirebaseAuth.instance.currentUser?.uid) {
           FirebaseAuth.instance.currentSchoolId = doc['schoolId'] as String?;
+          final classId = doc['classId'] as String?;
+          FirebaseAuth.instance._classId = classId;
+          await FirebaseAuth.instance._persistSession(
+            FirebaseAuth.instance.currentUser,
+            FirebaseAuth.instance.jwtToken,
+            doc['schoolId'] as String?,
+            classId,
+          );
         }
         // Save to cache
         MongoDBService.cacheDoc(collectionPath, _resolvedId, doc);
@@ -809,11 +817,18 @@ class FirebaseAuth {
   User? _currentUser;
   String? _jwtToken; 
   String? _currentSchoolId; // Cached schoolId for data isolation
+  String? _classId; // Cached classId for dashboard button persistence
 
   String? get currentSchoolId => _currentSchoolId;
   set currentSchoolId(String? val) {
     _currentSchoolId = val;
-    _persistSession(_currentUser, _jwtToken, val);
+    _persistSession(_currentUser, _jwtToken, val, _classId);
+  }
+
+  String? get classId => _classId;
+  set classId(String? val) {
+    _classId = val;
+    _persistSession(_currentUser, _jwtToken, _currentSchoolId, val);
   }
 
   static SharedPreferences? _prefs;
@@ -825,15 +840,28 @@ class FirebaseAuth {
     final name = _prefs?.getString('auth_name');
     final schoolId = _prefs?.getString('auth_schoolId');
     final token = _prefs?.getString('auth_token');
+    final classId = _prefs?.getString('auth_classId');
 
     if (uid != null) {
       instance._currentUser = User(uid: uid, email: email, displayName: name);
       instance._jwtToken = token;
       instance._currentSchoolId = schoolId;
+      instance._classId = classId;
+
+      // Seed the local user document cache so that it can be loaded offline instantly
+      if (MongoDBService._localDb['users']?[uid] == null) {
+        MongoDBService.cacheDoc('users', uid, {
+          '_id': uid,
+          'email': email ?? '',
+          'name': name ?? '',
+          'schoolId': schoolId ?? '',
+          'classId': classId ?? '',
+        });
+      }
     }
   }
 
-  Future<void> _persistSession(User? user, String? token, String? schoolId) async {
+  Future<void> _persistSession(User? user, String? token, String? schoolId, [String? classId]) async {
     if (_prefs == null) _prefs = await SharedPreferences.getInstance();
     if (user != null) {
       await _prefs?.setString('auth_uid', user.uid);
@@ -845,12 +873,18 @@ class FirebaseAuth {
       } else {
         await _prefs?.remove('auth_schoolId');
       }
+      if (classId != null) {
+        await _prefs?.setString('auth_classId', classId);
+      } else {
+        await _prefs?.remove('auth_classId');
+      }
     } else {
       await _prefs?.remove('auth_uid');
       await _prefs?.remove('auth_email');
       await _prefs?.remove('auth_name');
       await _prefs?.remove('auth_token');
       await _prefs?.remove('auth_schoolId');
+      await _prefs?.remove('auth_classId');
     }
   }
 
@@ -883,13 +917,18 @@ class FirebaseAuth {
     _jwtToken = res['token'] as String?;
     final userDoc = res['user'] as Map<String, dynamic>;
     _currentSchoolId = userDoc['schoolId'] as String?;
+    _classId = userDoc['classId'] as String?;
     
     _currentUser = User(
       uid: res['uid'] as String,
       email: email,
       displayName: userDoc['name'] as String?,
     );
-    await _persistSession(_currentUser, _jwtToken, _currentSchoolId);
+    await _persistSession(_currentUser, _jwtToken, _currentSchoolId, _classId);
+
+    // Cache the full user document locally immediately
+    MongoDBService.cacheDoc('users', res['uid'] as String, userDoc);
+
     _authController.add(_currentUser);
     return UserCredential(user: _currentUser);
   }
@@ -928,7 +967,7 @@ class FirebaseAuth {
       uid: res['uid'] as String,
       email: email,
     );
-    await _persistSession(_currentUser, _jwtToken, _currentSchoolId);
+    await _persistSession(_currentUser, _jwtToken, _currentSchoolId, null);
     _authController.add(_currentUser);
     return UserCredential(user: _currentUser);
   }
@@ -939,7 +978,8 @@ class FirebaseAuth {
     _currentUser = null;
     _jwtToken = null;
     _currentSchoolId = null;
-    await _persistSession(null, null, null);
+    _classId = null;
+    await _persistSession(null, null, null, null);
     _authController.add(null);
   }
 }
